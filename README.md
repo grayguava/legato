@@ -16,8 +16,17 @@
 
 </div>
 
+<p align="center">
+  <img src="assets/mockups/main_demo.webp" alt="The artist page, lyrics and player, side by side" width="100%">
+</p>
+
 Free music player for the YouTube Music catalogue, sign in only if you want
 your likes and playlists. Android first, desktop and TV later.
+
+| Bottom dock | Lyrics | Player |
+|:---:|:---:|:---:|
+| <img src="assets/mockups/bottom_dock.webp" alt="Bottom dock" width="100%"> | <img src="assets/mockups/lyrics_screen.webp" alt="Lyrics" width="100%"> | <img src="assets/mockups/player_controls.webp" alt="Player controls" width="100%"> |
+| **Bottom dock**<br>The mini player and the Home, Explore, Library pill, floating over the page. | **Lyrics**<br>The line being sung stays sharp; the rest fades back. | **Player**<br>Codec line, like, scrubber, transport and the output row. |
 
 ## Features
 
