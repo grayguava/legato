@@ -62,6 +62,10 @@ The screenshots show real albums, artists and songs to show the app as it's
 used. Cover art, names and recordings belong to their owners. Legato isn't
 affiliated with or endorsed by YouTube, Google or any artist or label shown.
 
+Legato hosts no music. It plays the catalogue's own streams, either the public
+ones or the ones your signed-in account can reach, and it uploads nothing of
+its own.
+
 ## License
 
 Legato is licensed under the [GNU General Public License v3.0](LICENSE). Code,
