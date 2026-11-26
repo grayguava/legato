@@ -4,9 +4,9 @@
 
 ### A music player for the YouTube Music catalogue
 
-[Android](https://img.shields.io/badge/Android-3DDC84?logo=android&logoColor=white) ·
-[Kotlin](https://img.shields.io/badge/Kotlin-DB71A8?logo=kotlin&logoColor=white) ·
-[License](LICENSE)
+[![Android](https://img.shields.io/badge/Android-3DDC84?logo=android&logoColor=white)](https://github.com/grayguava/legato/releases) ·
+[![Kotlin](https://img.shields.io/badge/Kotlin-DB71A8?logo=kotlin&logoColor=white)](https://kotlinlang.org) ·
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
 [Download](https://github.com/grayguava/legato/releases) ·
 [Features](#features) ·
