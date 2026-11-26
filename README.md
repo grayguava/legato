@@ -21,7 +21,7 @@
 </p>
 
 Free music player for the YouTube Music catalogue, sign in only if you want
-your likes and playlists. Android first, desktop and TV later.
+your likes and playlists.
 
 | Bottom dock | Lyrics | Player |
 |:---:|:---:|:---:|
