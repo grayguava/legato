@@ -54,7 +54,14 @@ layout are documented in the repo.
 
 ## Privacy
 
-No ads, no account needed. Sign in only to sync likes and playlists.
+No ads, no account needed, no telemetry. Legato ships no analytics SDK, no crash
+reporter and no usage counter, and there is no toggle that turns one on later.
+Nothing about your listening is collected for us, and there is no server of ours
+in the path.
+
+Signing in is optional and only reaches your own likes and playlists. Streams
+and artwork come from the catalogue, so that traffic is between you and YouTube,
+as with any player.
 
 ## Disclaimer
 
