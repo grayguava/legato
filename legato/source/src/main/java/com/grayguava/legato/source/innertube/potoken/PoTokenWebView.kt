@@ -440,6 +440,8 @@ public class PoTokenWebView private constructor(
 
     public companion object {
         private const val TAG = "PoTokenWebView"
+        // Public web client key and request key, copied from youtube.com's own JS.
+        // Every InnerTube client ships them; they are not credentials.
         private const val GOOGLE_API_KEY = "AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw"
         private const val REQUEST_KEY = "O43z0dpjhgX20SCx4KAo"
         private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
