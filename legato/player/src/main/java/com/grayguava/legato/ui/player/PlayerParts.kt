@@ -1,0 +1,1019 @@
+package com.grayguava.legato.ui.player
+
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import com.grayguava.legato.settings.AppSettings
+
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import android.media.AudioManager
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.unit.Dp
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.grayguava.legato.ui.components.glass
+import com.grayguava.legato.ui.components.pressable
+import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.FastForward
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.toArgb
+import com.materialkolor.hct.Hct
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.grayguava.legato.base.NerdStats
+import com.grayguava.legato.base.model.ROW_ART_PX
+import com.grayguava.legato.audio.playback.AudioFormatInfo
+import com.grayguava.legato.base.model.Song
+import com.grayguava.legato.base.model.artworkAt
+import com.grayguava.legato.ui.components.Artwork
+import com.grayguava.legato.ui.formatTime
+import com.grayguava.legato.ui.icons.SfIcons
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
+import coil3.request.allowHardware
+
+/**
+ * The full player's backdrop, in the style chosen in settings. With
+ * [fullCover] the artwork itself runs edge to edge across the top and fades
+ * into the background below it.
+ */
+@Composable
+public fun PlayerBackdrop(
+    artworkUrl: String?,
+    modifier: Modifier = Modifier,
+    animate: Boolean = true,
+    fullCover: Boolean = false,
+    /** Where the player's cover area ends, from the top; the full cover runs a little past it. */
+    fullCoverBottom: Dp? = null,
+    playing: Boolean = false,
+    /** Where the song sits in the queue, so a sharper copy of its cover swaps in place. */
+    index: Int = 0,
+    /** The playing song, so a sharper copy of its cover swaps in place rather than as a song change. */
+    songId: String? = null,
+    fullCoverVisible: Boolean = true,
+    /** The artwork's own tone, so the full-cover fade runs on the art rather than a flat ramp. */
+    seed: Color? = null,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Box(modifier.background(scheme.surface)) {
+        CoverBlur(artworkUrl, animate && playing, Modifier.matchParentSize())
+        if (fullCover) {
+            CoverSwap(CoverShown(artworkUrl, index, songId)) { url, motion ->
+                // The cover runs from the top down to just behind the title and
+                // fades out there into whatever backdrop is below it, with a light
+                // scrim at the top so the status line stays readable. It's never
+                // shorter than it is wide; taller, it's cropped at the sides.
+                androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().graphicsLayer { alpha = if (fullCoverVisible) 1f else 0f }) {
+                val height = maxOf(maxWidth / 0.9f, (fullCoverBottom ?: 0.dp) + FULL_COVER_OVERLAP)
+                val fade = fadeFrom(seed)
+                val share = (fade / height).coerceIn(0f, 0.85f)
+                val solidTo = 1f - share
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(height)
+                        .then(motion)
+                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                        .drawWithContent {
+                            drawContent()
+                            drawRect(
+                                Brush.verticalGradient(
+                                    *Array(FADE_CURVE_STOPS + 1) { i ->
+                                        val t = i / FADE_CURVE_STOPS.toFloat()
+                                        val gone = if (share > 0f && t > solidTo) smootherStep((t - solidTo) / share) else 0f
+                                        t to Color.Black.copy(alpha = 1f - gone)
+                                    },
+                                ),
+                                blendMode = BlendMode.DstIn,
+                            )
+                        },
+                ) {
+                    UpgradingArtwork(
+                        url.artworkAt(com.grayguava.legato.base.model.PLAYER_ART_PX),
+                        Modifier.matchParentSize(),
+                        shape = RectangleShape,
+                    )
+                    Box(Modifier.matchParentSize().background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.35f), 0.2f to Color.Transparent)))
+                }
+                }
+            }
+        }
+    }
+}
+
+
+/**
+ * A cover whose [url] may be swapped for a sharper copy while it's shown:
+ * the first stays drawn underneath until the new one has loaded and covers
+ * it, so there's no blank frame between them. [overlay] goes on top, inside
+ * the same frame.
+ */
+@Composable
+private fun UpgradingArtwork(
+    url: String?,
+    modifier: Modifier,
+    shape: androidx.compose.ui.graphics.Shape,
+    imageModifier: Modifier = Modifier,
+    overlay: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
+) {
+    val first = remember { url }
+    Box(modifier) {
+        Artwork(first, Modifier.matchParentSize(), shape = shape, imageModifier = imageModifier)
+        if (url != null && url != first) {
+            coil3.compose.AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.matchParentSize().clip(shape).then(imageModifier),
+            )
+        }
+        Box(Modifier.matchParentSize().clip(shape)) { overlay() }
+    }
+}
+
+/** How far a full-screen cover runs past its area, under the title, and how long its fade is. */
+private val FULL_COVER_OVERLAP = 44.dp
+private val FULL_COVER_FADE = 265.dp
+
+/** How many stops a gradient following [smootherStep] is cut into: enough that the straight spans between them neither band nor show the curve as facets over a tall fade. */
+private const val FADE_CURVE_STOPS = 16
+
+/** Smootherstep, for a fade across `t` in 0..1. Its slope and curvature are both zero at either end, so a fade drawn along it eases in from nothing and settles into nothing: no line where it starts or finishes. A straight ramp turns a corner at both, and the eye picks those corners out as edges across whatever is fading. */
+private fun smootherStep(t: Float): Float {
+    val x = t.coerceIn(0f, 1f)
+    return x * x * x * (x * (x * 6f - 15f) + 10f)
+}
+
+/**
+ * How far the full cover lifts off before the fade takes it: the artwork's own tone, so a
+ * bright cover keeps its lift longer than a dark one, with a floor under [FULL_COVER_FADE].
+ */
+private fun fadeFrom(seed: Color?): Dp {
+    val base = FULL_COVER_FADE
+    if (seed == null) return base
+    val lum = 0.2126f * seed.red + 0.7152f * seed.green + 0.0722f * seed.blue
+    return (base.value * (0.65f + 0.5f * lum)).coerceIn(0.65f, 1.15f).dp
+}
+
+/**
+ * The cover itself behind the player, blurred smooth, the way the album and
+ * playlist pages' headers show it: all of its colours blend into each other
+ * rather than a few picked out as patches. It sits on the song's own tone, so
+ * a dark cover still carries some colour, drifts and zooms slowly while
+ * [moving], and darkens toward the bottom for the title and controls.
+ * The cover is drawn tiny and stretched, which blends its colours on its
+ * own, then blurred; before Android 12, which has no blur, the stretch alone does it.
+ */
+@Composable
+private fun CoverBlur(artworkUrl: String?, moving: Boolean, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    // Stepped like the mesh: a slow drift needs only a dozen steps a second, and each step
+    // makes the player's glass blur and bend again.
+    val t by produceState(0f, moving) {
+        if (!moving) return@produceState
+        val start = withFrameNanos { it } - (value * 1e9f).toLong()
+        while (true) {
+            delay(MESH_STEP_MS)
+            value = (withFrameNanos { it } - start) / 1e9f
+        }
+    }
+    val canBlur = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+    Box(modifier.background(lerp(scheme.surface, scheme.primaryContainer, 0.7f)).clipToBounds()) {
+        androidx.compose.animation.Crossfade(artworkUrl, animationSpec = tween(900), label = "coverBlur") { url ->
+            val context = androidx.compose.ui.platform.LocalContext.current
+            // Drawn below into a small bitmap through a software canvas, which can't read a
+            // hardware bitmap (Coil's default), so this one is decoded as an ordinary one.
+            val painter = coil3.compose.rememberAsyncImagePainter(
+                remember(url) { coil3.request.ImageRequest.Builder(context).data(url.artworkAt(120)).size(96).allowHardware(false).build() },
+            )
+            Box(
+                Modifier.fillMaxSize()
+                    .graphicsLayer {
+                        val s = 1.45f + 0.07f * sin(t * 0.21f)
+                        scaleX = s; scaleY = s
+                        translationX = size.width * 0.05f * sin(t * 0.13f)
+                        translationY = size.height * 0.04f * cos(t * 0.11f)
+                        // A little of the song's tone under it shows through, so a dark cover isn't black.
+                        alpha = 0.82f
+                    }
+                    .then(if (canBlur) Modifier.blur(60.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded) else Modifier)
+                    .drawWithCache {
+                        // The cover drawn into a tiny image, then stretched over the screen with
+                        // smooth filtering: the stretch itself blends its colours into soft fields,
+                        // whatever the image loader decoded, and the blur smooths what's left.
+                        val small = androidx.compose.ui.graphics.ImageBitmap(COVER_BLUR_PX, COVER_BLUR_PX)
+                        val loaded = painter.state.value is coil3.compose.AsyncImagePainter.State.Success
+                        if (loaded) {
+                            androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(
+                                this, layoutDirection, androidx.compose.ui.graphics.Canvas(small),
+                                androidx.compose.ui.geometry.Size(COVER_BLUR_PX.toFloat(), COVER_BLUR_PX.toFloat()),
+                            ) { with(painter) { draw(size) } }
+                            // Softened in place too, so even a cover split hard in two comes out as one
+                            // gradual fade, whether or not the blur effect below is there to help.
+                            small.asAndroidBitmap().let { b ->
+                                val px = IntArray(COVER_BLUR_PX * COVER_BLUR_PX)
+                                b.getPixels(px, 0, COVER_BLUR_PX, 0, 0, COVER_BLUR_PX, COVER_BLUR_PX)
+                                softenSquare(px, COVER_BLUR_PX, radius = 5, passes = 3)
+                                b.setPixels(px, 0, COVER_BLUR_PX, 0, 0, COVER_BLUR_PX, COVER_BLUR_PX)
+                            }
+                        }
+                        val side = maxOf(size.width, size.height)
+                        onDrawBehind {
+                            if (!loaded) return@onDrawBehind
+                            drawImage(
+                                small,
+                                dstOffset = androidx.compose.ui.unit.IntOffset(((size.width - side) / 2).toInt(), ((size.height - side) / 2).toInt()),
+                                dstSize = androidx.compose.ui.unit.IntSize(side.toInt(), side.toInt()),
+                                filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
+                            )
+                        }
+                    },
+            )
+        }
+        // Darker toward the bottom so the title and controls stay readable.
+        Box(
+            Modifier.matchParentSize().background(
+                Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.12f), 0.5f to Color.Black.copy(alpha = 0.3f), 1f to Color.Black.copy(alpha = 0.58f)),
+            ),
+        )
+    }
+}
+
+/**
+ * A box blur run [passes] times over a [side] by [side] image of ARGB [px],
+ * along rows then columns, edges held: three passes come close to a
+ * Gaussian. For Cover blur's tiny image, where it costs next to nothing.
+ */
+internal fun softenSquare(px: IntArray, side: Int, radius: Int, passes: Int) {
+    val tmp = IntArray(px.size)
+    fun pass(src: IntArray, dst: IntArray, step: Int, line: Int) {
+        for (l in 0 until side) for (i in 0 until side) {
+            var a = 0; var r = 0; var g = 0; var b = 0
+            for (k in -radius..radius) {
+                val j = (i + k).coerceIn(0, side - 1)
+                val c = src[l * line + j * step]
+                a += c ushr 24; r += (c shr 16) and 0xFF; g += (c shr 8) and 0xFF; b += c and 0xFF
+            }
+            val n = radius * 2 + 1
+            dst[l * line + i * step] = ((a / n) shl 24) or ((r / n) shl 16) or ((g / n) shl 8) or (b / n)
+        }
+    }
+    repeat(passes) {
+        pass(px, tmp, step = 1, line = side) // along each row
+        pass(tmp, px, step = side, line = 1) // down each column
+    }
+}
+
+/** The size, in pixels, the cover is drawn at before Cover blur stretches it over the screen. */
+private const val COVER_BLUR_PX = 32
+
+private const val MESH_BLOBS = 5
+private const val MESH_CYCLE_NS = 40_000_000_000L
+private const val MESH_STEP_MS = 80L
+
+/** Each patch's resting place (x, y as fractions), its turns per drift across and down, and where it starts. */
+private val MESH_PATHS = arrayOf(
+    floatArrayOf(0.15f, 0.1f, 1f, 1f, 0f),
+    floatArrayOf(0.9f, 0.36f, -1f, 2f, 1.7f),
+    floatArrayOf(0.1f, 0.62f, 2f, -1f, 3.4f),
+    floatArrayOf(0.78f, 0.74f, 1f, -2f, 4.6f),
+    floatArrayOf(0.4f, 0.98f, -2f, 1f, 2.2f),
+)
+
+/**
+ * Large cover art. It eases smaller while paused, crossfades on a track
+ * change, and can be swiped sideways to skip.
+ */
+@Composable
+public fun ArtworkPane(
+    song: Song,
+    isPlaying: Boolean,
+    onSwipeNext: () -> Unit,
+    onSwipePrevious: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Whether the cover dissolves into the next one, or crossfades. */
+    animate: Boolean = true,
+    /** The song's place in the queue. */
+    index: Int = 0,
+) {
+    val coverShown by animateFloatAsState(1f, tween(450), label = "coverOverCanvas")
+
+    val scale by animateFloatAsState(
+        if (isPlaying) 1f else 0.86f,
+        spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessLow),
+        label = "artScale",
+    )
+    // The opening cover morph lands on this cover; tell it where and how big.
+    com.grayguava.legato.ui.components.PlayerMorph.playerCoverScale = scale
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { com.grayguava.legato.ui.components.PlayerMorph.playerCover = null } }
+    val offsetX = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val threshold = with(LocalDensity.current) { 96.dp.toPx() }
+
+    Box(
+        modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        val dx = offsetX.value
+                        when {
+                            dx < -threshold -> onSwipeNext()
+                            dx > threshold -> onSwipePrevious()
+                        }
+                        scope.launch { offsetX.animateTo(0f, spring(dampingRatio = 0.7f)) }
+                    },
+                    onDragCancel = { scope.launch { offsetX.animateTo(0f) } },
+                ) { change, amount ->
+                    change.consume()
+                    scope.launch { offsetX.snapTo(offsetX.value + amount) }
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.graphicsLayer { alpha = coverShown }, contentAlignment = Alignment.Center) {
+        CoverSwap(CoverShown(song.thumbnailUrl, index, song.videoId), animate) { url, motion ->
+            UpgradingArtwork(
+                url.artworkAt(com.grayguava.legato.base.model.PLAYER_ART_PX),
+                // As wide as the pane, unless that's taller than the room it has: then as
+                // tall as the room. Forcing the full width made a square that spilled over
+                // "Playing from" and the title on screens where the controls take more height.
+                Modifier
+                    .aspectRatio(1f)
+                    .then(motion)
+                    .then(with(com.grayguava.legato.ui.components.PlayerMorph) { Modifier.playerLanding() })
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = offsetX.value
+                        rotationZ = offsetX.value / 90f
+                        shadowElevation = 28.dp.toPx()
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
+                        clip = true
+                        // Hidden under the morphing cover while it grows in or shrinks away.
+                        alpha = if (com.grayguava.legato.ui.components.PlayerMorph.coverAway) 0f else 1f
+                    },
+                shape = MaterialTheme.shapes.extraLarge,
+            ) {
+            }
+        }
+        }
+    }
+}
+
+@Composable
+public fun SeekBar(
+    position: () -> Long,
+    buffered: () -> Long,
+    durationMs: Long,
+    onSeek: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+    /** The lyric line sung at a moment, shown above the finger while the bar is dragged. */
+    lyricAt: ((Long) -> String?)? = null,
+    /** What's said between the two times: the format line, when it's asked for. */
+    info: (@Composable () -> Unit)? = null,
+) {
+    var dragFraction by remember { mutableStateOf<Float?>(null) }
+    val base = 6.dp
+    val trackHeight by animateDpAsState(if (dragFraction != null) base * 2 else base, label = "track")
+    // The handle stands across the track while the bar is at rest.
+    val thumbShown = dragFraction == null
+    val thumbRadius by animateDpAsState(if (thumbShown) maxOf(7.dp, base * 0.9f + 3.dp) else 0.dp, label = "thumb")
+    val active = MaterialTheme.colorScheme.primary
+    val gradientEnd = MaterialTheme.colorScheme.tertiary
+    val inactive = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
+    val bufferedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+
+    fun fraction(): Float = dragFraction
+        ?: if (durationMs > 0) (position().toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+    // Until the song's length is known there's nothing to seek: a band of light runs along the
+    // track instead, so it reads as loading rather than stuck at the start.
+    val loading = durationMs <= 0
+    val sweep = if (loading) rememberInfiniteTransition(label = "seekLoading")
+        .animateFloat(-0.3f, 1.3f, infiniteRepeatable(tween(1_300, easing = LinearEasing)), label = "sweep") else null
+    val sheen = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+
+    // A remote or keyboard focuses the bar and moves through the song with left and right.
+    var focused by remember { mutableStateOf(false) }
+    val focusRing = MaterialTheme.colorScheme.primary
+
+    Column(modifier) {
+        Box {
+        if (lyricAt != null) ScrubLyric(dragFraction, durationMs, lyricAt)
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                // Reserve the actual touch target in layout; thick tracks and
+                // their handles must not spill into the line below.
+                .height(maxOf(48.dp, base * 6f))
+                .onFocusChanged { focused = it.isFocused }
+                .onKeyEvent { e ->
+                    val step = seekStepMs(e.key, durationMs) ?: return@onKeyEvent false
+                    if (e.type == KeyEventType.KeyDown) onSeek((position() + step).coerceIn(0L, durationMs))
+                    true
+                }
+                .focusable()
+                // Redrawn every frame while playing; its own layer keeps that from
+                // re-recording the rest of the player.
+                .graphicsLayer()
+                .semantics {
+                    contentDescription = "Playback position. Drag to seek."
+                    progressBarRangeInfo = ProgressBarRangeInfo(fraction(), 0f..1f)
+                    setProgress { value ->
+                        if (durationMs <= 0) false else {
+                            onSeek((value.coerceIn(0f, 1f) * durationMs).toLong()); true
+                        }
+                    }
+                }
+                .pointerInput(durationMs) {
+                    detectTapGestures { offset ->
+                        if (durationMs > 0) onSeek((offset.x / size.width).coerceIn(0f, 1f).times(durationMs).toLong())
+                    }
+                }
+                .pointerInput(durationMs) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragFraction = (it.x / size.width).coerceIn(0f, 1f) },
+                        onDragEnd = {
+                            dragFraction?.let { if (durationMs > 0) onSeek((it * durationMs).toLong()) }
+                            dragFraction = null
+                        },
+                        onDragCancel = { dragFraction = null },
+                    ) { change, delta ->
+                        change.consume()
+                        dragFraction = ((dragFraction ?: 0f) + delta / size.width).coerceIn(0f, 1f)
+                    }
+                },
+        ) {
+            val h = trackHeight.toPx() * (if (focused) 2f else 1f)
+            val y = (size.height - h) / 2
+            val r = CornerRadius(h / 2)
+            val f = fraction()
+            if (focused) drawRoundRect(focusRing, Offset(-3.dp.toPx(), y - 3.dp.toPx()), Size(size.width + 6.dp.toPx(), h + 6.dp.toPx()), CornerRadius(h / 2 + 3.dp.toPx()), style = Stroke(2.dp.toPx()))
+            val b = if (durationMs > 0) (buffered().toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+            drawRoundRect(inactive, Offset(0f, y), Size(size.width, h), r)
+            if (sweep != null) {
+                val at = sweep.value * size.width
+                val band = size.width * 0.25f
+                drawRoundRect(
+                    Brush.horizontalGradient(0f to sheen.copy(alpha = 0f), 0.5f to sheen, 1f to sheen.copy(alpha = 0f), startX = at - band, endX = at + band),
+                    Offset(0f, y), Size(size.width, h), r,
+                )
+                return@Canvas
+            }
+            drawRoundRect(bufferedColor, Offset(0f, y), Size(size.width * maxOf(b, f), h), r)
+            drawRoundRect(Brush.horizontalGradient(listOf(active, gradientEnd), endX = maxOf(size.width * f, 1f)), Offset(0f, y), Size(size.width * f, h), r)
+            if (thumbRadius > 0.dp) {
+                val at = Offset(size.width * f, size.height / 2)
+                val thumbColor = gradientEnd
+                // A short upright bar across the track, rounded at the ends.
+                val w = 3.dp.toPx()
+                val tall = thumbRadius.toPx() * 2.6f
+                drawRoundRect(thumbColor, Offset(at.x - w / 2f, at.y - tall / 2f), Size(w, tall), CornerRadius(w / 2f))
+            }
+        }
+        }
+        val elapsedSeconds by remember(durationMs) {
+            derivedStateOf { ((dragFraction?.times(durationMs)?.toLong() ?: position()) / 1000) }
+        }
+        val timeStyle = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum")
+        val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+        val density = LocalDensity.current
+        // Reserve identical, stable side columns using the whole track's length.
+        // Seconds changing width must never push the line sideways.
+        val timeWidth = remember(durationMs, timeStyle, density) {
+            val sample = if (durationMs > 0) "-" + formatTime(durationMs) else "--:--"
+            with(density) { (measurer.measure(sample, timeStyle).size.width + 8.dp.roundToPx()).toDp() }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text(if (loading) "--:--" else formatTime(elapsedSeconds * 1000), modifier = Modifier.width(timeWidth),
+                style = timeStyle, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            // The line sits below the seek target, clear of its touch bounds.
+            info?.let { Box(Modifier.weight(1f).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) { it() } }
+            Text(
+                if (durationMs <= 0) "--:--"
+                else "-" + formatTime((durationMs - elapsedSeconds * 1000).coerceAtLeast(0)),
+                modifier = Modifier.width(timeWidth),
+                style = timeStyle,
+                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/**
+ * Now playing, above the dock: a card tinted with the cover's colour, with
+ * the song's progress as a ring around the play button. Swipe it sideways to
+ * skip. [inline] is the round bubble the card becomes while a page scrolls:
+ * the cover in a circle, ringed by progress; tap it to open the player.
+ */
+@Composable
+public fun MiniPlayer(
+    song: Song,
+    isPlaying: Boolean,
+    isBuffering: Boolean,
+    hasNext: Boolean,
+    progress: () -> Float,
+    onTogglePlay: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    inline: Boolean = false,
+    /** The dock is folded down to one row: the player keeps only its play button. */
+    minimized: Boolean = false,
+    /**
+     * A still copy drawn inside the shrinking player card (see PlayerSheet):
+     * the same look, with no gestures, a solid face instead of glass, and
+     * not registered as where the mini player is.
+     */
+    replica: Boolean = false,
+) {
+    val offsetX = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val threshold = with(LocalDensity.current) { 72.dp.toPx() }
+    val accent = MaterialTheme.colorScheme.primary
+    val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f)
+    // The mini player's glass is plain: it keeps the app's own colour.
+    val tint by animateColorAsState(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.38f), tween(600), label = "miniTint")
+
+    val solid = MaterialTheme.colorScheme.surfaceContainerHigh
+    val replicaFace = androidx.compose.ui.graphics.lerp(solid, tint.copy(alpha = 1f), tint.alpha)
+    val landing: Modifier = if (replica) Modifier else with(com.grayguava.legato.ui.components.PlayerMorph) { Modifier.miniLanding().hiddenWhilePulled() }
+    if (inline) {
+        Box(
+            modifier
+                .then(
+                    if (replica) Modifier.clip(CircleShape).background(replicaFace)
+                    else with(com.grayguava.legato.ui.components.PlayerMorph) { Modifier.miniBarLanding(round = true).miniUnderCard() }
+                        .glass(CircleShape, tint)
+                        .pullToOpen(round = true, onOpen = onClick)
+                        .clickable(onClick = onClick),
+                )
+                .padding(4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            ProgressRing(progress, accent, track, stroke = 3.dp, modifier = Modifier.matchParentSize())
+            Artwork(song.thumbnailUrl.artworkAt(ROW_ART_PX), Modifier.padding(4.dp).fillMaxSize().then(landing), CircleShape)
+            if (isBuffering) CircularProgressIndicator(Modifier.matchParentSize(), strokeWidth = 3.dp, color = accent)
+        }
+        return
+    }
+
+    val shape = RoundedCornerShape(percent = 50)
+    if (replica) {
+        Box(modifier.clip(shape).background(replicaFace)) { MiniRow(song, isPlaying, isBuffering, hasNext, progress, accent, track, {}, {}, landing, minimized = false) }
+        return
+    }
+    Surface(
+        onClick = onClick,
+        shape = shape,
+        color = Color.Transparent,
+        modifier = modifier
+            .then(with(com.grayguava.legato.ui.components.PlayerMorph) { Modifier.miniBarLanding(round = false).miniUnderCard() })
+            .graphicsLayer { translationX = offsetX.value }
+            .glass(shape, tint)
+            .pullToOpen(round = false, onOpen = onClick)
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        when {
+                            offsetX.value < -threshold -> onNext()
+                            offsetX.value > threshold -> onPrevious()
+                        }
+                        scope.launch { offsetX.animateTo(0f, spring(dampingRatio = 0.7f)) }
+                    },
+                    onDragCancel = { scope.launch { offsetX.animateTo(0f) } },
+                ) { change, amount ->
+                    change.consume()
+                    scope.launch { offsetX.snapTo(offsetX.value + amount * 0.6f) }
+                }
+            },
+    ) {
+        MiniRow(song, isPlaying, isBuffering, hasNext, progress, accent, track, onTogglePlay, onNext, landing, minimized)
+    }
+}
+
+/** The mini player's row: cover, title and artist, play in its progress ring, and next
+ * while the dock is open; folded down it keeps only play. */
+@Composable
+private fun MiniRow(
+    song: Song, isPlaying: Boolean, isBuffering: Boolean, hasNext: Boolean, progress: () -> Float,
+    accent: Color, track: Color, onTogglePlay: () -> Unit, onNext: () -> Unit, landing: Modifier,
+    minimized: Boolean,
+) {
+        // Folded down, the bar is a tighter capsule: the cover centers in its rounded end.
+        Row(
+            Modifier.fillMaxSize().padding(start = if (minimized) 6.dp else 10.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AnimatedContent(song, transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) }, label = "mini", modifier = Modifier.weight(1f)) { s ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Artwork(s.thumbnailUrl.artworkAt(ROW_ART_PX), Modifier.size(44.dp).then(landing), CircleShape)
+                    Column(Modifier.padding(start = 12.dp)) {
+                        Text(s.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        com.grayguava.legato.ui.components.SubtitleLine(s.artist, explicit = s.isExplicit == true, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            // Play inside the progress ring.
+            Box(Modifier.size(46.dp).clip(CircleShape).clickable(onClick = onTogglePlay), contentAlignment = Alignment.Center) {
+                ProgressRing(progress, accent, track, stroke = 2.5.dp, modifier = Modifier.matchParentSize().padding(3.dp))
+                if (isBuffering) CircularProgressIndicator(Modifier.matchParentSize().padding(3.dp), strokeWidth = 2.5.dp, color = accent)
+                Icon(if (isPlaying) SfIcons.PauseFill else SfIcons.PlayFill, if (isPlaying) "Pause" else "Play", Modifier.size(24.dp))
+            }
+            AnimatedVisibility(
+                visible = !minimized,
+                enter = expandHorizontally(tween(180)),
+                exit = shrinkHorizontally(tween(180)),
+            ) {
+                IconButton(onClick = onNext, enabled = hasNext) {
+                    Icon(SfIcons.ForwardFill, "Next", Modifier.size(26.dp))
+                }
+            }
+        }
+}
+
+/**
+ * Swiping the mini player up opens the player, the cover growing out of it
+ * with the finger as it goes (see [com.grayguava.legato.ui.components.PlayerMorph.pullOpen]).
+ * Far enough and it opens, the flight finishing from there; short of that it
+ * settles back. With motion reduced it just opens past the line.
+ */
+@Composable
+private fun Modifier.pullToOpen(round: Boolean, onOpen: () -> Unit): Modifier {
+    val reduce = com.grayguava.legato.settings.AppSettings.ui.collectAsState().value.reduceAnimation
+    val scope = rememberCoroutineScope()
+    val back = remember { Animatable(0f) }
+    val density = LocalDensity.current
+    val screenH = with(density) { androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp.toPx() }
+    val openPx = with(density) { 90.dp.toPx() }
+    val open by androidx.compose.runtime.rememberUpdatedState(onOpen)
+    val morph = com.grayguava.legato.ui.components.PlayerMorph
+    // Read and written on the gesture itself, never from a launched step: a
+    // step landing after the finger lifts would pull the cover back up once
+    // the player has started opening, and leave it hanging there.
+    var pulled by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    fun settle(from: Float) = scope.launch {
+        back.snapTo(from)
+        back.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = 500f)) { if (!reduce) morph.pullOpen(value, round, screenH) }
+        morph.endPull()
+    }
+    // Taken away mid-pull (the player opened over it, the dock folded): let go of the cover.
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { morph.endPull() } }
+    return pointerInput(round, reduce) {
+        detectVerticalDragGestures(
+            onDragStart = { pulled = 0f; scope.launch { back.stop() } },
+            onDragEnd = {
+                val far = pulled
+                pulled = 0f
+                if (far >= openPx || morph.pulling >= 0.25f) open() else settle(far)
+            },
+            onDragCancel = { settle(pulled).also { pulled = 0f } },
+        ) { change, dy ->
+            change.consume()
+            pulled = (pulled - dy).coerceAtLeast(0f)
+            if (!reduce) morph.pullOpen(pulled, round, screenH)
+        }
+    }
+}
+
+/** The mini player's cover steps aside while the flying copy of it is pulled up. */
+private fun Modifier.hiddenWhilePulled(): Modifier = graphicsLayer {
+    // When the whole player is pulled up instead, the mini player keeps its cover under the card.
+    alpha = if (com.grayguava.legato.ui.components.PlayerMorph.pulling > 0f && !com.grayguava.legato.ui.components.PlayerMorph.sheetMorph) 0f else 1f
+}
+
+/** A circle that fills clockwise from the top as [progress] goes 0 to 1. */
+@Composable
+private fun ProgressRing(progress: () -> Float, color: Color, track: Color, stroke: Dp, modifier: Modifier = Modifier) {
+    // Its own layer: the ring redraws as the song plays, the glass under it needn't.
+    Canvas(modifier.graphicsLayer()) {
+        val w = stroke.toPx()
+        val inset = w / 2
+        val arcSize = Size(size.width - w, size.height - w)
+        drawArc(track, 0f, 360f, useCenter = false, topLeft = Offset(inset, inset), size = arcSize, style = Stroke(w))
+        drawArc(color, -90f, 360f * progress().coerceIn(0f, 1f), useCenter = false, topLeft = Offset(inset, inset), size = arcSize, style = Stroke(w, cap = StrokeCap.Round))
+    }
+}
+
+/** One line naming where the song is playing from, as a plain label, or "Now playing" when there isn't one. */
+@Composable
+public fun SongStatus(source: String?) {
+    Text(
+        if (source.isNullOrBlank()) "Now playing" else "Playing from $source",
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = TextAlign.Center,
+    )
+}
+
+/** What's actually playing, said in one line: codec, bitrate, sample rate and channels. */
+@Composable
+public fun NerdStatsLine(format: AudioFormatInfo?, modifier: Modifier = Modifier) {
+    val picked by NerdStats.lastPicked.collectAsState()
+    val kbps = format?.bitrateKbps ?: picked?.second
+    val parts = listOfNotNull(
+        format?.codec?.takeIf { it.isNotBlank() },
+        kbps?.takeIf { it > 0 }?.let { "$it kbps" },
+        format?.sampleRateHz?.takeIf { it > 0 }?.let { "%.1f".format(it / 1000f).removeSuffix(".0") + " kHz" },
+        format?.channels?.let { if (it == 1) "Mono" else if (it == 2) "Stereo" else "$it ch" },
+    )
+    Text(
+        parts.joinToString(" · ").ifEmpty { "Waiting for stream…" },
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = TextAlign.Center,
+    )
+}
+
+/** The volume of the phone's media output. */
+@Composable
+public fun VolumeBar(modifier: Modifier = Modifier) {
+    OutputVolumeBar(modifier)
+}
+
+@Composable
+internal fun OutputVolumeBar(modifier: Modifier) {
+    val context = LocalContext.current
+    val am = remember { context.getSystemService(AudioManager::class.java) }
+    val max = remember { am?.getStreamMaxVolume(AudioManager.STREAM_MUSIC)?.coerceAtLeast(1) ?: 1 }
+    var volume by remember { mutableFloatStateOf(
+        (am?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0).toFloat() / max
+    ) }
+    var dragging by remember { mutableStateOf(false) }
+    LaunchedEffect(am) {
+        while (true) {
+            if (!dragging) volume = (am?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0).toFloat() / max
+            delay(400)
+        }
+    }
+    fun commit() {
+        am?.setStreamVolume(AudioManager.STREAM_MUSIC, (volume * max).roundToInt(), 0)
+    }
+    fun adjust(step: Float) {
+        volume = (volume + step).coerceIn(0f, 1f)
+        commit()
+    }
+    var focused by remember { mutableStateOf(false) }
+    val focusInk = MaterialTheme.colorScheme.primary
+    val step = 1f / max
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Icon(SfIcons.Speaker, "Volume down", tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp).clickable { adjust(-step) })
+        val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
+        val fill = MaterialTheme.colorScheme.onSurface
+        fun preview(x: Float, width: Int) {
+            if (width <= 0) return
+            volume = (x / width).coerceIn(0f, 1f)
+            commit()
+        }
+        Canvas(
+            Modifier
+                .weight(1f)
+                .padding(horizontal = 10.dp)
+                .height(28.dp)
+                .onFocusChanged { focused = it.isFocused }
+                .onKeyEvent { e ->
+                    when (e.key) {
+                        Key.DirectionLeft, Key.DirectionRight -> {
+                            if (e.type == KeyEventType.KeyDown) adjust(if (e.key == Key.DirectionRight) step else -step)
+                            true
+                        }
+                        else -> false
+                    }
+                }
+                .focusable()
+                .semantics {
+                    contentDescription = "Media volume"
+                    progressBarRangeInfo = ProgressBarRangeInfo(volume, 0f..1f)
+                    setProgress { volume = it.coerceIn(0f, 1f); commit(); true }
+                }
+                .pointerInput(max) { detectTapGestures { preview(it.x, size.width); commit() } }
+                .pointerInput(max) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragging = true },
+                        onDragEnd = { commit(); dragging = false },
+                        onDragCancel = { dragging = false },
+                    ) { change, _ ->
+                        change.consume()
+                        preview(change.position.x, size.width)
+                    }
+                },
+        ) {
+            val h = (if (focused) 8.dp else 4.dp).toPx()
+            val y = (size.height - h) / 2
+            val f = volume.coerceIn(0f, 1f)
+            drawRoundRect(track, Offset(0f, y), Size(size.width, h), CornerRadius(h / 2))
+            if (focused) drawRoundRect(focusInk, Offset(0f, y - 3.dp.toPx()), Size(size.width, h + 6.dp.toPx()), CornerRadius(h), style = Stroke(2.dp.toPx()))
+            drawRoundRect(fill, Offset(0f, y), Size(size.width * f, h), CornerRadius(h / 2))
+        }
+        Icon(SfIcons.Speaker, "Volume up", tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp).clickable { adjust(step) })
+    }
+}
+
+/** An empty area that still skips tracks on a sideways swipe, for full-screen cover mode. */
+@Composable
+public fun ArtworkSwipeArea(
+    onSwipeNext: () -> Unit,
+    onSwipePrevious: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
+) {
+    val threshold = with(LocalDensity.current) { 96.dp.toPx() }
+    var dx by remember { mutableFloatStateOf(0f) }
+    Box(
+        modifier.pointerInput(Unit) {
+            detectHorizontalDragGestures(
+                onDragStart = { dx = 0f },
+                onDragEnd = {
+                    when {
+                        dx < -threshold -> onSwipeNext()
+                        dx > threshold -> onSwipePrevious()
+                    }
+                },
+            ) { change, amount ->
+                change.consume()
+                dx += amount
+            }
+        },
+        content = content,
+    )
+}
+
+/**
+ * While the seek bar is dragged, the line sung at that point in a bubble
+ * above the finger. It follows the finger, stays inside the bar's width
+ * and changes as the finger crosses into another line.
+ */
+@Composable
+private fun BoxScope.ScrubLyric(dragFraction: Float?, durationMs: Long, lyricAt: (Long) -> String?) {
+    var last by remember { mutableStateOf<String?>(null) }
+    var lastFraction by remember { mutableStateOf(0f) }
+    val line = dragFraction?.let { lyricAt((it * durationMs).toLong()) }
+    if (dragFraction != null) {
+        lastFraction = dragFraction
+        if (line != null) last = line
+    }
+    val shown by animateFloatAsState(if (dragFraction != null && last != null) 1f else 0f, spring(dampingRatio = 0.8f, stiffness = 500f), label = "scrubLyric")
+    if (shown <= 0.01f || last == null) return
+    val text = last!!
+    Box(
+        Modifier
+            .layout { measurable, constraints ->
+                val maxW = (constraints.maxWidth * 0.8f).toInt()
+                val p = measurable.measure(androidx.compose.ui.unit.Constraints(maxWidth = maxW))
+                layout(constraints.maxWidth, 0) {
+                    val center = (constraints.maxWidth * lastFraction).toInt()
+                    val x = (center - p.width / 2).coerceIn(0, (constraints.maxWidth - p.width).coerceAtLeast(0))
+                    p.place(x, -p.height - 6.dp.roundToPx())
+                }
+            }
+            .graphicsLayer {
+                alpha = shown
+                val s = 0.85f + 0.15f * shown
+                scaleX = s
+                scaleY = s
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
+                translationY = (1f - shown) * 8.dp.toPx()
+            }
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.92f))
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        androidx.compose.animation.AnimatedContent(
+            text,
+            transitionSpec = { (fadeIn(tween(160)) + slideInVertically(tween(200)) { it / 3 }) togetherWith fadeOut(tween(120)) },
+            label = "scrubLine",
+        ) { t ->
+            Text(t, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        }
+    }
+}
+
+/** How far left or right on a remote moves the song: 10 seconds, or a fiftieth of a long one. */
+internal fun seekStepMs(key: Key, durationMs: Long): Long? {
+    if (durationMs <= 0) return null
+    val step = maxOf(10_000L, durationMs / 50)
+    return when (key) {
+        Key.DirectionRight, Key.MediaFastForward -> step
+        Key.DirectionLeft, Key.MediaRewind -> -step
+        else -> null
+    }
+}

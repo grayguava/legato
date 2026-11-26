@@ -1,0 +1,797 @@
+package com.grayguava.legato.ui
+
+
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.animation.EnterExitState
+import android.net.Uri
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.unit.toSize
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import com.grayguava.legato.base.model.ROW_ART_PX
+import com.grayguava.legato.base.model.artworkAt
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.LocalOverscrollFactory
+import com.grayguava.legato.ui.components.RubberBandOverscrollFactory
+import com.grayguava.legato.ui.player.PlayerViewModel
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavHostController
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.grayguava.legato.library.MusicRepository
+import kotlinx.coroutines.flow.first
+import com.grayguava.legato.base.model.SearchResult
+import com.grayguava.legato.base.model.SearchFilter
+import com.grayguava.legato.library.LibraryStore
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import com.grayguava.legato.base.model.BrowseItem
+import com.grayguava.legato.base.model.BrowseType
+import com.grayguava.legato.base.model.ShelfItem
+import com.grayguava.legato.ui.browse.ArtistScreen
+import com.grayguava.legato.ui.browse.CollectionScreen
+import com.grayguava.legato.ui.browse.SongActions
+import com.grayguava.legato.ui.account.LoginScreen
+import com.grayguava.legato.ui.components.LocalBackdrop
+import com.grayguava.legato.ui.components.LocalHazeState
+import com.grayguava.legato.ui.components.LocalSongMenu
+import com.grayguava.legato.ui.components.SongMenuActions
+import com.grayguava.legato.ui.library.LibraryNav
+import com.grayguava.legato.ui.library.LikedScreen
+import com.grayguava.legato.ui.library.LocalPlaylistScreen
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.grayguava.legato.ui.explore.ExploreScreen
+import com.grayguava.legato.ui.explore.MoodScreen
+import com.grayguava.legato.ui.home.HomeScreen
+import com.grayguava.legato.ui.library.LibraryScreen
+import com.grayguava.legato.ui.library.LocalMusicScreen
+import com.grayguava.legato.ui.library.CachedSongsScreen
+import com.grayguava.legato.ui.library.ReplayScreen
+import com.grayguava.legato.ui.wrapped.WrappedScreen
+import com.grayguava.legato.ui.player.MiniPlayerBar
+import com.grayguava.legato.ui.icons.SfIcons
+import com.grayguava.legato.ui.player.PlayerScreen
+import com.grayguava.legato.ui.search.SearchScreen
+import com.grayguava.legato.ui.settings.EqualizerScreen
+import com.grayguava.legato.ui.settings.RemixScreen
+import com.grayguava.legato.ui.settings.SettingsScreen
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
+
+/** A tab tapped again while its root page is showing, for the page to scroll back to its top and refresh. */
+public object TabEvents {
+    private val _reselected = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 1)
+    public val reselected: kotlinx.coroutines.flow.SharedFlow<String> = _reselected
+    public fun reselect(route: String) { _reselected.tryEmit(route) }
+}
+
+private enum class Tab(val route: String, val label: String, val icon: ImageVector, val selectedIcon: ImageVector) {
+    HOME("home", "Home", SfIcons.House, SfIcons.HouseFill),
+    EXPLORE("explore", "Explore", SfIcons.Safari, SfIcons.SafariFill),
+    LIBRARY("library", "Library", SfIcons.Album, SfIcons.AlbumFill),
+}
+
+private const val SEARCH_ROUTE = "search"
+
+
+@Composable
+public fun AppRoot(vm: PlayerViewModel) {
+    val nav = rememberNavController()
+    val song by vm.currentSong.collectAsState()
+    val isPlaying by vm.isPlaying.collectAsState()
+    val playbackError by vm.playbackError.collectAsState()
+    var playerOpen by rememberSaveable { mutableStateOf(false) }
+    // The docked player folded into its strip, on screens wide enough for one.
+    var paneCollapsed by rememberSaveable { mutableStateOf(false) }
+    var playerCovers by remember { mutableStateOf(false) }
+    val haze = rememberHazeState()
+    val uiScope = rememberCoroutineScope()
+    val artistLookup = remember { java.util.concurrent.atomic.AtomicReference<kotlinx.coroutines.Job?>(null) }
+    val backdrop = rememberLayerBackdrop()
+    // A page's long-press panel, drawn above everything once a page asks for it.
+    val menuLayer = remember { com.grayguava.legato.ui.components.MenuLayer() }
+    // Floating glass blurs a recording of the page (and bends it, with Liquid Glass on).
+    val sampled = com.grayguava.legato.ui.components.backdropBlurOn()
+    // Scrolling any page down folds the bottom bar into one row; scrolling up unfolds it.
+    val chromeScroll = rememberChromeScroll()
+    val chromeUi by com.grayguava.legato.settings.AppSettings.ui.collectAsState()
+    // Explore without a tab of its own lives on the Search page instead.
+    val separateExplore = chromeUi.separateExplore
+    val dockTabs = remember(separateExplore) { if (separateExplore) Tab.entries.toList() else Tab.entries - Tab.EXPLORE }
+    val chromeTabs = remember(dockTabs) { dockTabs.map { ChromeTab(it.label, it.icon, it.selectedIcon) } }
+    // A page opened from inside the player (the artist, from a tap on their
+    // name) folds the player away; back from that page opens the player
+    // again, as it was left. Held: the page the player was over, and the page
+    // it opened, by back stack entry.
+    var playerReturn by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val fromPlayer: (go: () -> Unit) -> Unit = remember(nav) {
+        { go ->
+            val wasOpen = playerOpen
+            val below = nav.currentBackStackEntry?.id
+            playerOpen = false
+            go()
+            val opened = nav.currentBackStackEntry?.id
+            playerReturn = if (wasOpen && below != null && opened != null && opened != below) below to opened else null
+        }
+    }
+    LaunchedEffect(nav) {
+        nav.currentBackStackEntryFlow.collect { entry ->
+            val (below, opened) = playerReturn ?: return@collect
+            if (opened in nav.stackIds()) return@collect
+            playerReturn = null
+            // Back to where the player was opened over: the player comes back too.
+            if (entry.id == below && vm.currentSong.value != null) {
+                if (!chromeUi.reduceAnimation) com.grayguava.legato.ui.components.PlayerMorph.openSheet()
+                playerOpen = true
+            }
+        }
+    }
+
+    val appContext = androidx.compose.ui.platform.LocalContext.current
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    val entry by nav.currentBackStackEntryAsState()
+    val route = entry?.destination?.route
+    var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
+    // Explore's tab turned off while on it: back to Home, Explore is on the Search page now.
+    LaunchedEffect(separateExplore) {
+        if (!separateExplore && tab == Tab.EXPLORE) {
+            tab = Tab.HOME
+            if (route == Tab.EXPLORE.route) nav.popBackStack(Tab.HOME.route, inclusive = false)
+        }
+    }
+    LaunchedEffect(route) {
+        Tab.entries.firstOrNull { it.route == route }?.let { tab = it }
+        chromeScroll.expand()
+    }
+    LaunchedEffect(playbackError) { playbackError?.let { com.grayguava.legato.base.Pills.error(it) } }
+    LaunchedEffect(Unit) { com.grayguava.legato.audio.playback.SmartShuffle.notices.collect { com.grayguava.legato.base.Pills.info(it) } }
+
+    // Kept across recompositions (opening the player, play/pause): a new
+    // instance each time would recompose every screen and list handed one.
+    val actions = remember(song?.videoId, isPlaying) {
+        SongActions(
+            currentVideoId = song?.videoId,
+            isPlaying = isPlaying,
+            playAll = { songs, index, shuffle, source -> vm.playAll(songs, index, shuffle, source) },
+            playNext = vm::playNext,
+            addToQueue = vm::addToQueue,
+            smartShuffle = { songs, source -> vm.smartShuffle(songs, source) },
+        )
+    }
+    val openItem: (ShelfItem) -> Unit = remember(nav, vm) { { item ->
+        val browseId = item.browseId
+        when {
+            browseId != null -> nav.openBrowse(browseId)
+            else -> item.toSong()?.let { vm.play(it, "Home") }
+        }
+    } }
+    // A long press on an album or playlist card: its songs are fetched when an action needs them.
+    val collectionMenu = remember(nav, vm) {
+        fun withSongs(id: String, use: (List<com.grayguava.legato.base.model.Song>) -> Unit) {
+            uiScope.launch {
+                val songs = runCatching { MusicRepository.collection(id).songs }.getOrNull().orEmpty()
+                if (songs.isEmpty()) com.grayguava.legato.base.Pills.error("Couldn't load its songs just now") else use(songs)
+            }
+        }
+        com.grayguava.legato.ui.components.CollectionMenuActions(
+            play = { id, title, shuffle -> withSongs(id) { vm.playAll(it, 0, shuffle, title) } },
+            // Last first, so the list plays next in its own order.
+            playNext = { id -> withSongs(id) { songs -> songs.asReversed().forEach(vm::playNext); com.grayguava.legato.base.Pills.done("${songs.size} songs play next") } },
+            addToQueue = { id -> withSongs(id) { songs -> songs.forEach(vm::addToQueue); com.grayguava.legato.base.Pills.done("${songs.size} songs added to the queue") } },
+            open = { id, type -> fromPlayer { nav.openBrowse(id, type) } },
+        )
+    }
+    // `song` is read when a menu action runs, so the menu doesn't need rebuilding as songs change.
+    val songMenu = remember(nav, vm) { SongMenuActions(
+        playNext = vm::playNext,
+        addToQueue = vm::addToQueue,
+        startRadio = vm::startRadio,
+        openAlbum = { id -> fromPlayer { nav.openBrowse(id, BrowseType.ALBUM) } },
+        openArtist = { id -> fromPlayer { nav.openBrowse(id, BrowseType.ARTIST) } },
+        dislike = { s ->
+            // The player skips it, and its later copies in the queue, itself.
+            LibraryStore.dislike(s)
+            com.grayguava.legato.base.Pills.done("You won't hear \"${s.title}\" in autoplay again")
+        },
+        notInterested = { s ->
+            LibraryStore.hideSong(s)
+            vm.player.dropHiddenSmartShuffleSongs()
+            com.grayguava.legato.base.Pills.withAction("\"${s.title}\" won't be suggested", "Undo") { LibraryStore.unhideSong(s.videoId) }
+        },
+        dontPlayArtist = dontPlay@{ s ->
+            val artist = LibraryStore.hideArtist(s) ?: return@dontPlay
+            vm.player.dropHiddenSmartShuffleSongs()
+            com.grayguava.legato.base.Pills.withAction("Songs by ${artist.name} won't be suggested", "Undo") { LibraryStore.unhideArtist(artist.key) }
+        },
+        keepInPlaylist = { s, id ->
+            LibraryStore.addToPlaylist(id, s)
+            com.grayguava.legato.audio.playback.SmartShuffle.keep(s.videoId)
+            LibraryStore.playlist(id)?.let { p -> com.grayguava.legato.base.Pills.done("Added to ${p.name}") }
+        },
+        progressOf = { s -> if (s.videoId == vm.currentSong.value?.videoId) vm.positionMs() to vm.durationMs.value else null },
+        // One artist lookup at a time: a slower earlier one that failed showed its
+        // "Couldn't find" over the page a later tap had already opened.
+        viewArtist = { s ->
+            artistLookup.get()?.cancel()
+            artistLookup.set(uiScope.launch {
+                val id = MusicRepository.artistIdFor(s)
+                if (id == null) {
+                    com.grayguava.legato.base.Pills.error("Couldn't find ${s.artist}'s page")
+                } else {
+                    fromPlayer { nav.openBrowse(id, BrowseType.ARTIST) }
+                }
+            })
+        },
+        viewAlbum = { s ->
+            artistLookup.get()?.cancel()
+            artistLookup.set(uiScope.launch {
+                val id = MusicRepository.albumIdFor(s)
+                if (id == null) com.grayguava.legato.base.Pills.error("Couldn't find the album for \"${s.title}\"")
+                else fromPlayer { nav.openBrowse(id, BrowseType.ALBUM) }
+            })
+        },
+        viewArtistNamed = { s, name ->
+            artistLookup.get()?.cancel()
+            artistLookup.set(uiScope.launch {
+                val id = MusicRepository.artistIdFor(s, name)
+                if (id == null) {
+                    com.grayguava.legato.base.Pills.error("Couldn't find $name's page")
+                } else {
+                    fromPlayer { nav.openBrowse(id, BrowseType.ARTIST) }
+                }
+            })
+        },
+    ) }
+    val libraryNav = remember(nav) { LibraryNav(
+        local = { nav.navigate("local") },
+        cached = { nav.navigate("cached") },
+        replay = { nav.navigate("replay") },
+        settings = { nav.navigate("settings") },
+        liked = { nav.navigate("liked") },
+        playlist = { id -> nav.navigate("playlist/${Uri.encode(id)}") },
+        browse = { id -> nav.openBrowse(id) },
+        wrapped = { nav.navigate("wrapped") },
+        history = { nav.navigate("history") },
+        allPlaylists = { nav.navigate("playlists") },
+    ) }
+    // Links opened from outside: a song plays with its radio, anything else opens its page.
+    val incoming by Links.incoming.collectAsState()
+    LaunchedEffect(incoming) {
+        when (val link = incoming) {
+            is LinkTarget.Song -> {
+                vm.player.connected.first { it }
+                val queue = runCatching { MusicRepository.watchQueue(link.videoId) }.getOrDefault(emptyList())
+                val at = queue.indexOfFirst { it.videoId == link.videoId }
+                // A radio, though it arrives as a list: smart shuffle doesn't apply.
+                if (at >= 0) vm.playAll(queue, at, false, "Shared link", fromList = false)
+                else vm.play(com.grayguava.legato.base.model.Song(link.videoId, "Shared song", "", null), "Shared link")
+                playerOpen = true
+            }
+            is LinkTarget.Browse -> nav.openBrowse(link.browseId)
+            // Read for its title and artist, then found on YouTube Music; autoplay carries on from it.
+            is LinkTarget.Elsewhere -> {
+                vm.player.connected.first { it }
+                val named = com.grayguava.legato.source.links.MusicLinks.resolve(link.url)
+                val match = named?.let { n ->
+                    runCatching { MusicRepository.search("${n.title} ${n.artist}".trim(), SearchFilter.SONGS) }.getOrDefault(emptyList())
+                        .firstNotNullOfOrNull { (it as? SearchResult.TopTrack)?.song ?: (it as? SearchResult.Track)?.song }
+                }
+                when {
+                    match != null -> { vm.play(match, "Shared link"); playerOpen = true }
+                    named != null -> com.grayguava.legato.base.Pills.error("Couldn't find \"${named.title}\" on YouTube Music")
+                    else -> com.grayguava.legato.base.Pills.error("Couldn't read that link")
+                }
+            }
+            is LinkTarget.Player -> playerOpen = true
+            is LinkTarget.PlaySearch -> {
+                vm.player.connected.first { it }
+                if (link.query.isBlank()) {
+                    val recent = com.grayguava.legato.library.history.History.recents(com.grayguava.legato.library.history.History.records.value, 50)
+                    if (recent.isNotEmpty()) vm.playAll(recent, 0, true, "Recently played")
+                } else {
+                    // YouTube's best match leads the mixed search; autoplay follows it with radio.
+                    val match = runCatching { MusicRepository.search(link.query, SearchFilter.ALL) }.getOrDefault(emptyList())
+                        .firstNotNullOfOrNull { (it as? SearchResult.TopTrack)?.song ?: (it as? SearchResult.Track)?.song }
+                    if (match != null) vm.play(match, link.query) else com.grayguava.legato.base.Pills.error("Nothing found for \"${link.query}\"")
+                }
+            }
+            null -> return@LaunchedEffect
+        }
+        Links.consumed()
+    }
+    // The Wrapped story fills the screen, like the login page.
+    val chromeRoute = route != "login" && route != "wrapped"
+    val chromeVisible = chromeRoute && !playerCovers
+    // The window's size class picks the chrome. A fold or unfold only changes
+    // what's around the pages: the NavHost and the player keep their place in
+    // the tree, so neither starts over (the activity handles the size change
+    // itself rather than being recreated; see the manifest).
+    val window = with(androidx.compose.ui.platform.LocalDensity.current) { androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.toSize().toDpSize() }
+    val layout = appLayout(window.width.value.toInt(), window.height.value.toInt(), song != null, paneCollapsed, chromeUi.wideLayout, chromeUi.sidePlayer)
+    // Docked beside the page, the player is never also opened over it.
+    val sheetOpen = playerOpen && !layout.sidePlayer
+    com.grayguava.legato.ui.theme.SystemBars(if (sheetOpen) androidx.compose.ui.graphics.Color.Black else MaterialTheme.colorScheme.background)
+    val currentLayout by androidx.compose.runtime.rememberUpdatedState(layout)
+    LaunchedEffect(playerOpen) {
+        // Asked for the player (a shared song, say) while it's docked: unfold the pane.
+        if (playerOpen && currentLayout.sidePlayer) {
+            paneCollapsed = false
+            playerOpen = false
+        }
+    }
+    // Unfolding with the full player open: the pane shows it. Folding back
+    // brings the full player back, as it was left.
+    LaunchedEffect(layout.sidePlayer) { if (layout.sidePlayer && playerOpen) paneCollapsed = false }
+    val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val content = if (layout.nav == NavChrome.DOCK) {
+        PaddingValues(bottom = navInset + CHROME_TAB_HEIGHT + 24.dp + if (song != null) CHROME_MINI_HEIGHT + 8.dp else 0.dp)
+    } else {
+        PaddingValues(bottom = navInset + 16.dp + if (layout.nowPlaying == NowPlaying.BAR) CHROME_MINI_HEIGHT + 12.dp else 0.dp)
+    }
+    // Room the rail and the docked player take beside the pages, eased as
+    // the pane folds and unfolds.
+    val direction = androidx.compose.ui.platform.LocalLayoutDirection.current
+    val safe = WindowInsets.safeDrawing.asPaddingValues()
+    val startGutter = if (layout.nav == NavChrome.RAIL && chromeRoute) RAIL_GUTTER + safe.calculateStartPadding(direction) else 0.dp
+    val endGutterTarget = when {
+        !chromeRoute -> 0.dp
+        layout.nowPlaying == NowPlaying.PANE -> PANE_GUTTER + safe.calculateEndPadding(direction)
+        layout.nowPlaying == NowPlaying.STRIP -> STRIP_GUTTER + safe.calculateEndPadding(direction)
+        else -> 0.dp
+    }
+    val endGutter by androidx.compose.animation.core.animateDpAsState(
+        endGutterTarget,
+        if (chromeUi.reduceAnimation) androidx.compose.animation.core.snap() else tween(420, easing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0f, 0f, 1f)),
+        label = "endGutter",
+    )
+    // Pages in a readable column on wide windows, centred in the room left;
+    // the ones that fill the screen still do.
+    val pageArea = Modifier.padding(start = startGutter, end = endGutter)
+        .then(layout.contentMaxWidthDp?.takeIf { chromeRoute }?.let { Modifier.widthIn(max = it.dp) } ?: Modifier)
+    val selectTab: (Int) -> Unit = { i ->
+        // A tab chosen is somewhere new, not a way back to the player.
+        playerReturn = null
+        val t = dockTabs[i]
+        when {
+            // On the tab's root already: Home scrolls to the top and refreshes.
+            t == tab && route == t.route -> TabEvents.reselect(t.route)
+            // Somewhere inside this tab: back to its root, dropping what was opened there.
+            t == tab -> nav.popBackStack(t.route, inclusive = false)
+            else -> {
+                tab = t
+                if (t == Tab.HOME) nav.popBackStack(Tab.HOME.route, inclusive = false)
+                else nav.navigate(t.route) {
+                    popUpTo(Tab.HOME.route)
+                    launchSingleTop = true
+                }
+            }
+        }
+    }
+    // Tapped again on Search, the cursor goes straight into the search bar.
+    val openSearch = {
+        if (route != SEARCH_ROUTE) nav.navigate(SEARCH_ROUTE) { launchSingleTop = true }
+        else com.grayguava.legato.ui.search.SearchFocus.request()
+    }
+    val openMood: (com.grayguava.legato.base.model.MoodGenre) -> Unit = { mood ->
+        nav.navigate("mood/${Uri.encode(mood.browseId)}?params=${Uri.encode(mood.params.orEmpty())}&title=${Uri.encode(mood.title)}")
+    }
+
+    // Back on the first page while music plays: the app shrinks up into a pill at the
+    // top, towards the notification's player, and goes to the background. Coming
+    // back finds it full size again.
+    val leave = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(lifecycle) { lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) { leave.snapTo(0f) } }
+    val atRoot = entry != null && nav.previousBackStackEntry == null
+    BackHandler(enabled = isPlaying && atRoot && !sheetOpen && !chromeUi.reduceAnimation && leave.targetValue == 0f) {
+        val activity = appContext as? android.app.Activity
+        uiScope.launch {
+            // Long enough to read as one gesture, on a curve that starts briskly and
+            // glides into place, the way iOS sends an app home.
+            leave.animateTo(1f, androidx.compose.animation.core.tween(560, easing = androidx.compose.animation.core.CubicBezierEasing(0.32f, 0.72f, 0f, 1f)))
+            if (activity == null || !activity.moveTaskToBack(true)) { leave.snapTo(0f); return@launch }
+            // The shrink was the closing; skip the system's own on top of it where it allows.
+            @Suppress("DEPRECATION") activity.overridePendingTransition(0, 0)
+        }
+    }
+
+    CompositionLocalProvider(
+        LocalHazeState provides haze,
+        LocalSongMenu provides songMenu,
+        com.grayguava.legato.ui.components.LocalCollectionMenu provides collectionMenu,
+        LocalChromeScroll provides chromeScroll,
+        com.grayguava.legato.ui.components.LocalMenuLayer provides menuLayer,
+        // iOS-style rubber band at the ends of every list.
+        LocalOverscrollFactory provides RubberBandOverscrollFactory,
+    ) {
+        com.grayguava.legato.ui.components.ConnectionBanner(
+            Modifier.fillMaxSize().graphicsLayer {
+                val p = leave.value
+                if (p > 0f) {
+                    // Shrinking toward the top centre, cropped down to a pill as it goes.
+                    // The crop runs a little ahead of the shrink, so the rounded pill
+                    // shape is there early and the rest is it settling into place.
+                    val s = 1f - 0.68f * p
+                    scaleX = s
+                    scaleY = s
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
+                    translationY = 30.dp.toPx() * p
+                    val crop = 1f - (1f - p) * (1f - p)
+                    shape = com.grayguava.legato.ui.components.pillCrop(crop, 375.dp.toPx(), 100.dp.toPx())
+                    clip = true
+                    // Lifted off the screen as it goes, and softening into the pill.
+                    shadowElevation = 28.dp.toPx() * p
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && p > 0.35f) {
+                        val b = 10.dp.toPx() * ((p - 0.35f) / 0.65f)
+                        renderEffect = androidx.compose.ui.graphics.BlurEffect(b, b)
+                    }
+                    alpha = if (p < 0.8f) 1f else 1f - (p - 0.8f) / 0.2f
+                }
+            },
+            reduceMotion = chromeUi.reduceAnimation,
+        ) {
+            Box(
+                Modifier.fillMaxSize()
+                    .then(if (sampled) Modifier.layerBackdrop(backdrop) else Modifier)
+                    // Painted inside the recorded layer: a see-through backdrop would let
+                    // the sharp page show through the glass instead of the blurred copy.
+                    .background(MaterialTheme.colorScheme.background)
+                    .hazeSource(haze)
+                    .nestedScroll(chromeScroll),
+            ) {
+                // Glass inside the pages is part of the layer the chrome blurs, so it
+                // can't sample the shell's own layer: pages get their own plane to
+                // sample instead (see page()), and a page overlay records its content
+                // (GlassPage). Sampling the shell's layer from inside it would draw
+                // the layer into itself, and the render tree would never finish preparing.
+                CompositionLocalProvider(LocalHazeState provides null) {
+                NavHost(
+                    navController = nav,
+                    startDestination = Tab.HOME.route,
+                    modifier = Modifier.align(Alignment.TopCenter).then(pageArea).fillMaxSize(),
+                    enterTransition = { PageMotion.enter(chromeUi.reduceAnimation) },
+                    exitTransition = { PageMotion.exit(chromeUi.reduceAnimation) },
+                    popEnterTransition = { PageMotion.popEnter(chromeUi.reduceAnimation) },
+                    popExitTransition = { PageMotion.popExit(chromeUi.reduceAnimation) },
+                ) {
+                    page(Tab.HOME.route) {
+                        HomeScreen(
+                            contentPadding = content,
+                            actions = actions,
+                            onItemClick = openItem,
+                            onOpenSettings = { nav.navigate("settings") },
+                            covered = playerCovers,
+                        )
+                    }
+                    page(Tab.EXPLORE.route) {
+                        ExploreScreen(content, onMoodClick = openMood, onItemClick = openItem, onOpenSettings = { nav.navigate("settings") })
+                    }
+                    page(Tab.LIBRARY.route) {
+                        LibraryScreen(contentPadding = content, actions = actions, nav = libraryNav)
+                    }
+                    page(SEARCH_ROUTE) {
+                        SearchScreen(
+                            contentPadding = content,
+                            currentVideoId = song?.videoId,
+                            isPlaying = isPlaying,
+                            onPlay = { vm.play(it, "Search") },
+                            onPlayNext = vm::playNext,
+                            onAddToQueue = vm::addToQueue,
+                            onBrowse = { item: BrowseItem -> nav.openBrowse(item.browseId, item.type) },
+                            onOpenList = { list ->
+                                list.playlistId?.let { nav.navigate("playlist/${Uri.encode(it)}") } ?: list.browseId?.let { nav.openBrowse(it) }
+                            },
+                            explore = if (separateExplore) null else ({
+                                ExploreScreen(content, onMoodClick = openMood, onItemClick = openItem, showHeader = false)
+                            }),
+                        )
+                    }
+                    page("settings") {
+                        SettingsScreen(
+                            contentPadding = content,
+                            onBack = { nav.popBackStack() },
+                            onOpenEqualizer = { nav.navigate("equalizer") },
+                            onOpenReplay = { nav.navigate("replay") },
+                            onOpenWrapped = { nav.navigate("wrapped") },
+                            onSignIn = { nav.navigate("login") },
+                            onOpenRemix = { nav.navigate("remix") },
+                        )
+                    }
+                    page("login") { entry ->
+                        // Only while it's still the page in front: a late second call mustn't close the one under it.
+                        LoginScreen(onDone = { if (nav.currentBackStackEntry == entry) nav.popBackStack() })
+                    }
+                    page("playlists") { com.grayguava.legato.ui.library.AllPlaylistsScreen(content, libraryNav, onBack = { nav.popBackStack() }) }
+                    page("liked") {
+                        LikedScreen(content, actions, onBack = { nav.popBackStack() }, onOpenYouTubeLikes = { nav.openBrowse("VLLM", BrowseType.PLAYLIST) })
+                    }
+                    page("playlist/{id}", listOf(navArgument("id") { type = NavType.StringType })) { e ->
+                        LocalPlaylistScreen(e.arguments?.getString("id").orEmpty(), content, actions, onBack = { nav.popBackStack() })
+                    }
+                    page("equalizer") { EqualizerScreen(content, onBack = { nav.popBackStack() }) }
+                    page("remix") { RemixScreen(content, onBack = { nav.popBackStack() }) }
+                    page("local") { LocalMusicScreen(content, actions, onBack = { nav.popBackStack() }) }
+                page("cached") { CachedSongsScreen(content, actions, onBack = { nav.popBackStack() }) }
+                    page("history") { com.grayguava.legato.ui.library.ListeningHistoryScreen(content, actions, onBack = { nav.popBackStack() }) }
+                    page("replay") { ReplayScreen(content, actions, onBack = { nav.popBackStack() }, onOpenWrapped = { nav.navigate("wrapped") }) }
+                    page("wrapped") { WrappedScreen(actions, onBack = { nav.popBackStack() }, player = vm.player) }
+                    page("collection/{id}", listOf(navArgument("id") { type = NavType.StringType })) { e ->
+                        CollectionScreen(e.arguments?.getString("id").orEmpty(), content, actions, onBack = { nav.popBackStack() })
+                    }
+                    page("artist/{id}", listOf(navArgument("id") { type = NavType.StringType })) { e ->
+                        ArtistScreen(
+                            e.arguments?.getString("id").orEmpty(), content, actions,
+                            onBack = { nav.popBackStack() },
+                            onItemClick = openItem,
+                            onShowAll = { shelf ->
+                                shelf.moreBrowseId?.let { id ->
+                                    nav.navigate("artist-items/${Uri.encode(id)}?params=${Uri.encode(shelf.moreParams.orEmpty())}&title=${Uri.encode(shelf.title)}")
+                                }
+                            },
+                        )
+                    }
+                    page(
+                        "artist-items/{id}?params={params}&title={title}",
+                        listOf(
+                            navArgument("id") { type = NavType.StringType },
+                            navArgument("params") { type = NavType.StringType; defaultValue = "" },
+                            navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                        ),
+                    ) { e ->
+                        val args = e.arguments
+                        com.grayguava.legato.ui.browse.ArtistItemsScreen(
+                            title = args?.getString("title").orEmpty(),
+                            browseId = args?.getString("id").orEmpty(),
+                            params = args?.getString("params")?.takeIf { it.isNotEmpty() },
+                            contentPadding = content,
+                            onBack = { nav.popBackStack() },
+                            onItemClick = openItem,
+                        )
+                    }
+                    page(
+                        "mood/{id}?params={params}&title={title}",
+                        listOf(
+                            navArgument("id") { type = NavType.StringType },
+                            navArgument("params") { type = NavType.StringType; defaultValue = "" },
+                            navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                        ),
+                    ) { e ->
+                        val args = e.arguments
+                        MoodScreen(
+                            title = args?.getString("title").orEmpty(),
+                            browseId = args?.getString("id").orEmpty(),
+                            params = args?.getString("params")?.takeIf { it.isNotEmpty() },
+                            contentPadding = content,
+                            onBack = { nav.popBackStack() },
+                            onItemClick = openItem,
+                        )
+                    }
+                }
+                }
+            }
+
+            // Pages blur and fade as they pass under the status bar.
+            if (route != "login") com.grayguava.legato.ui.components.TopEdgeFrost(Modifier.align(Alignment.TopCenter))
+
+            // The pull bar sits above the frost, or its slashes would be blurred.
+            com.grayguava.legato.ui.components.RefreshBarHost(Modifier.align(Alignment.TopCenter))
+
+            // Floating chrome: the mini player above the nav pill and search button.
+            // It sits outside the recorded layer, so its Liquid Glass can sample it.
+            if (chromeVisible) CompositionLocalProvider(LocalBackdrop provides backdrop.takeIf { sampled }) {
+            val openPlayer: (Boolean) -> Unit = { _ ->
+                // The whole player grows out of the mini player, from wherever a pull left it.
+                if (!chromeUi.reduceAnimation) com.grayguava.legato.ui.components.PlayerMorph.openSheet()
+                playerOpen = true
+            }
+            if (layout.nav == NavChrome.DOCK) {
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
+                BottomChrome(
+                    inline = chromeScroll.inline,
+                    tabs = chromeTabs,
+                    selected = if (route == SEARCH_ROUTE) null else dockTabs.indexOf(tab).takeIf { it >= 0 },
+                    onSelect = selectTab,
+                    onExpand = chromeScroll::expand,
+                    searchSelected = route == SEARCH_ROUTE,
+                    onSearch = openSearch,
+                    mini = if (song == null) null else { folded, minimized, m ->
+                        MiniPlayerBar(vm, onExpand = { openPlayer(folded) }, modifier = m, inline = folded, minimized = minimized)
+                    },
+                    reduceMotion = chromeUi.reduceAnimation,
+                )
+            }
+            } else {
+                // Wide windows: the tabs in a rail down the start edge, and the mini
+                // player along the bottom of the page unless the player is docked.
+                NavRail(
+                    tabs = chromeTabs,
+                    selected = if (route == SEARCH_ROUTE) null else dockTabs.indexOf(tab).takeIf { it >= 0 },
+                    onSelect = selectTab,
+                    searchSelected = route == SEARCH_ROUTE,
+                    onSearch = openSearch,
+                    modifier = Modifier.align(Alignment.CenterStart),
+                    reduceMotion = chromeUi.reduceAnimation,
+                )
+                Column(
+                    Modifier.align(Alignment.BottomCenter).then(pageArea).fillMaxWidth()
+                        .navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                ) {
+                    if (layout.nowPlaying == NowPlaying.BAR) {
+                        MiniPlayerBar(vm, onExpand = { openPlayer(false) }, modifier = Modifier.fillMaxWidth().height(CHROME_MINI_HEIGHT))
+                    }
+                }
+            }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = layout.nowPlaying == NowPlaying.STRIP,
+                enter = fadeIn(tween(if (chromeUi.reduceAnimation) 120 else 260, delayMillis = if (chromeUi.reduceAnimation) 0 else 160)),
+                exit = fadeOut(tween(120)),
+                modifier = Modifier.align(Alignment.CenterEnd),
+            ) {
+                PlayerStrip(vm, onExpand = { paneCollapsed = false })
+            }
+            }
+
+            // Expanded windows: the player itself, docked on the end edge while a
+            // song is loaded. It folds into the strip above, and back.
+            androidx.compose.animation.AnimatedVisibility(
+                visible = layout.nowPlaying == NowPlaying.PANE && chromeRoute,
+                enter = if (chromeUi.reduceAnimation) fadeIn(tween(160)) else slideInHorizontally(tween(420, easing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0f, 0f, 1f))) { it } + fadeIn(tween(220)),
+                exit = if (chromeUi.reduceAnimation) fadeOut(tween(120)) else slideOutHorizontally(tween(320, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { it } + fadeOut(tween(260)),
+                modifier = Modifier.align(Alignment.CenterEnd),
+            ) {
+                PlayerPaneFrame {
+                    PlayerScreen(
+                        vm,
+                        onCollapse = { paneCollapsed = true },
+                        onEqualizer = { nav.navigate("equalizer") },
+                        docked = true,
+                    )
+                }
+            }
+
+            val sheetMorph = !chromeUi.reduceAnimation
+            androidx.compose.runtime.SideEffect { com.grayguava.legato.ui.components.PlayerMorph.sheetMorph = sheetMorph }
+            // The player itself, whichever way it comes and goes.
+            val playerSheet: @Composable (settled: Boolean) -> Unit = { settled ->
+                // Registered after the NavHost's own handler, so back closes the
+                // player first instead of popping the page behind it.
+                BackHandler(enabled = sheetOpen) { playerOpen = false }
+                // Once the player is fully over the page, the chrome under it is
+                // taken out: no second position loop or glass redrawn behind it.
+                var still by remember { mutableStateOf(true) }
+                LaunchedEffect(settled, still) { playerCovers = settled && still }
+                DisposableEffect(Unit) { onDispose { playerCovers = false } }
+                PlayerScreen(
+                    vm,
+                    onCollapse = { playerOpen = false },
+                    onCovering = { still = it },
+                    onEqualizer = { fromPlayer { nav.navigate("equalizer") } },
+                )
+            }
+            if (sheetMorph) {
+                // Out of the mini player as one card, and back into it.
+                var sheetSettled by remember { mutableStateOf(false) }
+                com.grayguava.legato.ui.components.PlayerSheet(
+                    open = sheetOpen && song != null,
+                    onSettled = { sheetSettled = it },
+                    face = { round -> MiniPlayerBar(vm, onExpand = {}, modifier = Modifier.fillMaxSize(), inline = round, replica = true) },
+                ) {
+                    playerSheet(sheetSettled)
+                }
+            } else {
+                AnimatedVisibility(
+                    visible = sheetOpen && song != null,
+                    enter = PageMotion.playerIn(chromeUi.reduceAnimation),
+                    exit = PageMotion.playerOut(chromeUi.reduceAnimation),
+                ) {
+                    playerSheet(transition.currentState == EnterExitState.Visible && transition.targetState == EnterExitState.Visible)
+                }
+            }
+            // Notes about what was just done float in over everything, the player included.
+            // Keep one host alive across player transitions, but use the visible screen's palette.
+            com.grayguava.legato.ui.theme.PlayerTheme(
+                seed = com.grayguava.legato.ui.theme.rememberArtworkSeed(song?.thumbnailUrl),
+                neutral = true,
+                active = sheetOpen && song != null,
+            ) {
+                com.grayguava.legato.ui.components.PillHost(chromeUi.reduceAnimation, Modifier.align(Alignment.TopCenter))
+            }
+            // A page's long-press panel: over everything, and outside the recorded
+            // layer, so its frost blurs the page the way the player's menu does.
+            CompositionLocalProvider(LocalBackdrop provides backdrop.takeIf { sampled }) {
+                menuLayer.panel?.invoke()
+            }
+        }
+    }
+}
+
+/** [NowPlayingStrip] following the player. */
+@Composable
+private fun PlayerStrip(vm: PlayerViewModel, onExpand: () -> Unit) {
+    val isPlaying by vm.isPlaying.collectAsState()
+    val hasNext by vm.hasNext.collectAsState()
+    NowPlayingStrip(
+        isPlaying = isPlaying,
+        hasNext = hasNext,
+        onTogglePlay = vm::togglePlayPause,
+        onNext = vm::skipNext,
+        onExpand = onExpand,
+    ) { m -> MiniPlayerBar(vm, onExpand = onExpand, modifier = m, inline = true) }
+}
+
+/** The ids of the entries on the back stack, top last. The whole stack is only public as this restricted, long-stable flow. */
+@android.annotation.SuppressLint("RestrictedApi")
+private fun NavHostController.stackIds(): List<String> = currentBackStack.value.map { it.id }
+
+private fun NavHostController.openBrowse(browseId: String, type: BrowseType = MusicRepository.typeOf(browseId)) {
+    val route = when {
+        type == BrowseType.ARTIST -> "artist/{id}"
+        else -> "collection/{id}"
+    }
+    // Already on that page (a second tap while the first was still finding it):
+    // stay, so back doesn't have to go through the same page twice.
+    val here = currentBackStackEntry
+    if (here?.destination?.route == route && here.arguments?.getString("id") == browseId) return
+    navigate(route.replace("{id}", Uri.encode(browseId)))
+}
+
+/**
+ * A destination of the NavHost. Each one gets the plane its own glass samples
+ * ([GlassBackground]), so a header button looks the same on every page; a page
+ * that wants colour there (a wash, the playing song's cover) passes its own.
+ */
+private fun androidx.navigation.NavGraphBuilder.page(
+    route: String,
+    arguments: List<androidx.navigation.NamedNavArgument> = emptyList(),
+    content: @Composable androidx.compose.animation.AnimatedContentScope.(androidx.navigation.NavBackStackEntry) -> Unit,
+) = composable(route, arguments) { entry ->
+    val pageScope = this
+    com.grayguava.legato.ui.components.GlassBackground {
+        with(pageScope) { content(entry) }
+    }
+}

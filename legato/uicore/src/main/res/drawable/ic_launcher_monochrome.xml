@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Legato mark in one colour, for themed icons: the same two slashes, five
+     percent shorter. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M34.66,73.24L52.55,34.76M55.45,73.24L73.39,34.76"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="13.63"
+        android:strokeLineCap="round" />
+</vector>

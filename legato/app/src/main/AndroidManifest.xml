@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Android 16+: the playing song as a Live Update in the status bar. Granted at install. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- High performance mode asks to be left out of battery saving, so frames aren't throttled. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Taps and buzzes at the strength set in Settings. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Reverb runs as an auxiliary effect on the output mix. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Local music. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- "Set as ringtone": changing the default sounds, and on Android 9 and
+         older saving the ringtone's copy to shared storage. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+
+    <!-- The phone's own equalizer, opened from the Equalizer page. -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.DISPLAY_AUDIO_EFFECT_CONTROL_PANEL" />
+        </intent>
+    </queries>
+
+    <!-- Nothing here is required hardware. -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.location.network" android:required="false" />
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
+
+    <application
+        android:name=".LegatoApp"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.Legato"
+        android:supportsRtl="true"
+        android:networkSecurityConfig="@xml/network_security_config">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Legato"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout">
+            <!-- The launcher icon: one icon, always the same. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Turning, folding, unfolding and resizing the window are handled by the
+                 Compose UI, which picks its layout from the window's size, so pages,
+                 scroll positions and the player stay as they were rather than the
+                 activity starting over. -->
+            <!-- Open YouTube Music and YouTube links: songs, playlists, albums, channels.
+                 Not autoVerify: these domains aren't ours, so the user picks Legato. -->
+            <intent-filter tools:ignore="AppLinkWarning">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="music.youtube.com" />
+                <data android:host="www.youtube.com" />
+                <data android:host="youtube.com" />
+                <data android:host="m.youtube.com" />
+                <data android:host="youtu.be" />
+            </intent-filter>
+            <!-- "Play … on Legato" from the Assistant. -->
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <!-- Shared links ("Share to Legato"). -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name="com.grayguava.legato.audio.playback.PlaybackService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+                <!-- A media library: Android Auto and other media browsers can
+                     browse Home, Recent and Library and search. -->
+                <action android:name="androidx.media3.session.MediaLibraryService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <!-- Cover art for Android Auto, which only loads content:// artwork.
+             Not exported: the browser that lists items is granted read access. -->
+        <provider
+            android:name="com.grayguava.legato.audio.playback.ArtworkProvider"
+            android:authorities="${applicationId}.artwork"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
+        <!-- The picture sent along when a song is shared. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.share"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/share_paths" />
+        </provider>
+
+        <!-- Shows Legato as a media app in Android Auto. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
+        <!-- The home-screen widget. -->
+
+        <receiver android:name=".widget.AlbumArtWidget" android:exported="false" android:label="@string/widget_album_art_label">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_album_art_info" />
+        </receiver>
+        <!-- Media buttons (the widget's, a headset's after the app was closed)
+             start the player and resume the saved queue. -->
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

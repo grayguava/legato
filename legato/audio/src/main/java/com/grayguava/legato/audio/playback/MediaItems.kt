@@ -1,0 +1,138 @@
+package com.grayguava.legato.audio.playback
+
+import android.net.Uri
+import android.os.Bundle
+import androidx.media3.common.MediaItem
+import androidx.media3.common.C
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
+import com.grayguava.legato.source.innertube.UpgradedTracks
+import com.grayguava.legato.source.local.LocalMusic
+import com.grayguava.legato.base.model.NOTIFICATION_ART_PX
+import com.grayguava.legato.base.model.QueueTier
+import com.grayguava.legato.base.model.Song
+import com.grayguava.legato.base.model.artworkAt
+import androidx.media3.common.MimeTypes
+
+/**
+ * Queue entries point at `legato://track/<videoId>` rather than at a stream
+ * URL. [PlaybackService] swaps that for a real URL only when ExoPlayer opens
+ * the item, so queueing twenty-five tracks costs nothing up front and no
+ * entry sits in the queue holding a URL that has gone stale by its turn.
+ */
+private const val TRACK_SCHEME = "legato"
+private const val TRACK_HOST = "track"
+private const val EXTRA_DURATION_TEXT = "durationText"
+private const val EXTRA_ALBUM = "album"
+private const val EXTRA_THUMB = "thumb"
+private const val EXTRA_EXPLICIT = "explicit"
+private const val EXTRA_ARTIST_ID = "artistId"
+private const val EXTRA_SMART_SHUFFLE = "smartShuffle"
+private const val EXTRA_TIER = "tier"
+
+/**
+ * Local files play straight from MediaStore; everything else resolves on open.
+ */
+public fun trackUri(videoId: String): Uri = when {
+    LocalMusic.isLocal(videoId) -> LocalMusic.contentUri(videoId)
+    else -> streamUri(videoId, upgraded = UpgradedTracks.contains(videoId))
+}
+
+/** A YouTube track's queue URI; [upgraded] asks for the better stream found mid-play. */
+public fun streamUri(videoId: String, upgraded: Boolean): Uri =
+    Uri.Builder().scheme(TRACK_SCHEME).authority(TRACK_HOST).appendPath(videoId)
+        .apply { if (upgraded) appendQueryParameter(QUALITY_PARAM, QUALITY_UPGRADED) }
+        .build()
+
+/** The video id a [trackUri] stands for, or null for any other URI. */
+public fun videoIdOf(uri: Uri): String? =
+    if (uri.scheme == TRACK_SCHEME && uri.authority == TRACK_HOST) uri.lastPathSegment else null
+
+public fun isUpgradedUri(uri: Uri): Boolean = uri.getQueryParameter(QUALITY_PARAM) == QUALITY_UPGRADED
+
+/** The song cache key: the video id, kept apart for an upgraded copy. */
+public fun cacheKeyOf(uri: Uri): String? = videoIdOf(uri)?.let { id ->
+    if (isUpgradedUri(uri)) "$id:hq" else id
+}
+
+private const val QUALITY_PARAM = "q"
+private const val QUALITY_UPGRADED = "hq"
+
+public fun Song.toMediaItem(): MediaItem =
+    MediaItem.Builder()
+        .setMediaId(videoId)
+        .setUri(trackUri(videoId))
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(title)
+                .setArtist(artist)
+                .setAlbumTitle(albumName)
+                // Media3's notification draws this as the large icon. Without it the
+                // shade has no cover and falls back to the app's icon.
+                .setArtworkUri(
+                    thumbnailUrl.artworkAt(NOTIFICATION_ART_PX)
+                        ?.takeIf { it.startsWith("http") }
+                        ?.let { Uri.parse(it) },
+                )
+                .setExtras(
+                    Bundle().apply {
+                        putString(EXTRA_DURATION_TEXT, durationText)
+                        putString(EXTRA_ALBUM, albumName)
+                        // The cover as the song stores it.
+                        putString(EXTRA_THUMB, thumbnailUrl)
+                        isExplicit?.let { putBoolean(EXTRA_EXPLICIT, it) }
+                        // Kept so "Don't play [artist]" from the player knows the artist by id too.
+                        artistId?.let { putString(EXTRA_ARTIST_ID, it) }
+                        if (smartShuffle) putBoolean(EXTRA_SMART_SHUFFLE, true)
+                        if (queueTier != QueueTier.CONTEXT) putString(EXTRA_TIER, queueTier.name)
+                    },
+                )
+                .build(),
+        )
+        .build()
+
+public fun MediaItem.toSong(): Song =
+    Song(
+        videoId = mediaId,
+        title = mediaMetadata.title?.toString().orEmpty(),
+        artist = mediaMetadata.artist?.toString().orEmpty(),
+        thumbnailUrl = mediaMetadata.extras?.getString(EXTRA_THUMB) ?: mediaMetadata.artworkUri?.toString(),
+        durationText = mediaMetadata.extras?.getString(EXTRA_DURATION_TEXT),
+        albumName = mediaMetadata.extras?.getString(EXTRA_ALBUM) ?: mediaMetadata.albumTitle?.toString(),
+        isExplicit = mediaMetadata.extras?.takeIf { it.containsKey(EXTRA_EXPLICIT) }?.getBoolean(EXTRA_EXPLICIT),
+        artistId = mediaMetadata.extras?.getString(EXTRA_ARTIST_ID),
+        smartShuffle = mediaMetadata.extras?.getBoolean(EXTRA_SMART_SHUFFLE) == true,
+        queueTier = mediaMetadata.extras?.getString(EXTRA_TIER)?.let { t -> QueueTier.entries.firstOrNull { it.name == t } } ?: QueueTier.CONTEXT,
+    )
+
+/** Update credits for this exact recording without touching its selected audio or queue extras. */
+public fun MediaItem.withTrackArtistCredit(credit: Song): MediaItem {
+    if (mediaId != credit.videoId || !com.grayguava.legato.base.model.isPlaceholderArtist(mediaMetadata.artist?.toString()) ||
+        com.grayguava.legato.base.model.isPlaceholderArtist(credit.artist)) return this
+    val extras = Bundle(mediaMetadata.extras ?: Bundle()).apply {
+        remove(EXTRA_ARTIST_ID)
+        credit.artistId?.let { putString(EXTRA_ARTIST_ID, it) }
+    }
+    return buildUpon().setMediaMetadata(mediaMetadata.buildUpon().setArtist(credit.artist).setExtras(extras).build()).build()
+}
+
+/** Which part of the queue this entry is in. */
+public val MediaItem.queueTier: QueueTier
+    get() = mediaMetadata.extras?.getString(EXTRA_TIER)?.let { t -> QueueTier.entries.firstOrNull { it.name == t } } ?: QueueTier.CONTEXT
+
+/**
+ * Queue indices in the order they will play from here: the current item
+ * first, then what follows it with shuffle applied and repeat ignored.
+ */
+public fun Player.upcomingPlayOrder(): List<Int> {
+    val timeline = currentTimeline
+    if (timeline.isEmpty) return emptyList()
+    val out = mutableListOf(currentMediaItemIndex)
+    var index = currentMediaItemIndex
+    while (true) {
+        index = timeline.getNextWindowIndex(index, Player.REPEAT_MODE_OFF, shuffleModeEnabled)
+        if (index == C.INDEX_UNSET || out.size > timeline.windowCount) break
+        out += index
+    }
+    return out
+}

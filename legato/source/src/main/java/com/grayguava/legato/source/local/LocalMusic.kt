@@ -1,0 +1,92 @@
+package com.grayguava.legato.source.local
+
+import android.content.ContentUris
+import android.content.Context
+import android.annotation.SuppressLint
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
+import androidx.core.net.toUri
+import com.grayguava.legato.base.model.Song
+import com.grayguava.legato.settings.LibrarySettings
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/** Audio files on the device, read from MediaStore. */
+public object LocalMusic {
+    public const val PREFIX: String = "local:"
+    private val ALBUM_ART = "content://media/external/audio/albumart".toUri()
+
+    public fun isLocal(videoId: String): Boolean = videoId.startsWith(PREFIX)
+
+    public fun contentUri(videoId: String): Uri = ContentUris.withAppendedId(
+        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+        videoId.removePrefix(PREFIX).toLong(),
+    )
+
+    public data class Track(val song: Song, val folder: String, val mimeType: String?, val durationMs: Long, val isMusic: Boolean)
+
+    public suspend fun tracks(context: Context, settings: LibrarySettings): List<Song> = withContext(Dispatchers.IO) {
+        query(context)
+            .filter { settings.localFolder == null || it.folder == settings.localFolder }
+            .map { it.song }
+    }
+
+    public suspend fun folders(context: Context): List<Pair<String, Int>> = withContext(Dispatchers.IO) {
+        query(context).groupingBy { it.folder }.eachCount().toList().sortedBy { it.first.lowercase() }
+    }
+
+    // Lint's Recycle check doesn't see Kotlin's use {}, which closes the cursor.
+    @SuppressLint("Recycle")
+    private fun query(context: Context): List<Track> {
+        val folderColumn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.MIME_TYPE,
+            MediaStore.Audio.Media.IS_MUSIC,
+            folderColumn,
+        )
+        val out = mutableListOf<Track>()
+        val cursor = context.contentResolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            projection,
+            null,
+            null,
+            "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE",
+        ) ?: return out
+        cursor.use { c ->
+            while (c.moveToNext()) {
+                val id = c.getLong(0)
+                val duration = c.getLong(5)
+                val rawFolder = c.getString(8).orEmpty()
+                val folder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) rawFolder else rawFolder.substringBeforeLast('/') + "/"
+                val artist = c.getString(2)?.takeUnless { it == "<unknown>" } ?: "Unknown artist"
+                out += Track(
+                    song = Song(
+                        videoId = "$PREFIX$id",
+                        title = c.getString(1).orEmpty(),
+                        artist = artist,
+                        thumbnailUrl = ContentUris.withAppendedId(ALBUM_ART, c.getLong(4)).toString(),
+                        durationText = formatDuration(duration),
+                        albumName = c.getString(3),
+                    ),
+                    folder = folder,
+                    mimeType = c.getString(6),
+                    durationMs = duration,
+                    isMusic = c.getInt(7) != 0,
+                )
+            }
+        }
+        return out
+    }
+
+    private fun formatDuration(ms: Long): String {
+        val s = ms / 1000
+        return "%d:%02d".format(s / 60, s % 60)
+    }
+}

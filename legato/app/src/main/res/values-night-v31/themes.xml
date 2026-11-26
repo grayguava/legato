@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The system splash: the mark on black, with no circle round it, handing
+         straight over to the app. The mark is drawn on its own rather than as
+         the launcher icon, so nothing masks or frames it. -->
+    <style name="Theme.Legato" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowSplashScreenBackground">@color/opening_field</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_mark</item>
+    </style>
+</resources>

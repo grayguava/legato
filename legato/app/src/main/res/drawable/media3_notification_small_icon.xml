@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Media3 looks up this exact name for the playback notification's small icon.
+     Same mark as ic_stat_legato, five percent shorter. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M4.93,18.42L11.47,5.03M12.53,18.42L19.07,5.03"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="4.97"
+        android:strokeLineCap="round" />
+</vector>

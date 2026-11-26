@@ -1,0 +1,271 @@
+package com.grayguava.legato.ui.library
+
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.grayguava.legato.library.MusicRepository
+import com.grayguava.legato.library.history.History
+import com.grayguava.legato.library.LibraryStore
+import com.grayguava.legato.base.model.SearchFilter
+import com.grayguava.legato.base.model.SearchResult
+import com.grayguava.legato.base.model.Song
+import com.grayguava.legato.base.model.artworkAt
+import com.grayguava.legato.base.model.ROW_ART_PX
+import com.grayguava.legato.ui.components.Artwork
+import com.grayguava.legato.ui.components.FloatingCard
+import com.grayguava.legato.ui.components.FloatingDialog
+import com.grayguava.legato.ui.components.MenuRow
+import com.grayguava.legato.ui.components.SheetButton
+import kotlinx.coroutines.delay
+
+/** Opens [AddSongsSheet]; for a playlist made in the app. */
+@Composable
+public fun AddSongsButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .height(44.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .clickable {  onClick() }
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, null, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Add songs", style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+/**
+ * Find songs and put them in the playlist [playlistId]: a search box, and
+ * while it's empty, what was played lately. Each song has a + that turns
+ * into a check once it's in.
+ */
+@Composable
+public fun AddSongsSheet(playlistId: String, onDismiss: () -> Unit) {
+    val playlists by LibraryStore.playlists.collectAsState()
+    val playlist = playlists.firstOrNull { it.id == playlistId }
+    val inList = playlist?.songs?.map { it.videoId }?.toSet().orEmpty()
+    val records by History.records.collectAsState()
+    val recent = remember(records) { History.recents(records, 20) }
+    var query by remember { mutableStateOf("") }
+    var results by remember { mutableStateOf<List<Song>?>(null) }
+    var searching by remember { mutableStateOf(false) }
+    var searchError by remember { mutableStateOf<String?>(null) }
+    var attempt by remember { mutableStateOf(0) }
+    LaunchedEffect(query, attempt) {
+        val q = query.trim()
+        searchError = null
+        if (q.isEmpty()) { results = null; searching = false; return@LaunchedEffect }
+        // Wait for a pause in the typing, then ask.
+        delay(350)
+        searching = true
+        try {
+            results = MusicRepository.search(q, SearchFilter.SONGS)
+                .mapNotNull { (it as? SearchResult.Track)?.song ?: (it as? SearchResult.TopTrack)?.song }
+                .distinctBy { it.videoId }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            searchError = com.grayguava.legato.ui.friendlyError(e)
+        } finally { searching = false }
+    }
+    FloatingCard(
+        onDismiss = onDismiss,
+        title = "Add songs",
+        icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
+        expandable = true,
+        header = {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                singleLine = true,
+                placeholder = { Text("Search for songs") },
+                leadingIcon = { Icon(Icons.Rounded.Search, null) },
+                shape = RoundedCornerShape(18.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+            )
+        },
+    ) {
+        val list = results ?: recent
+        Column(Modifier.weight(1f, fill = false).heightIn(min = 120.dp).verticalScroll(rememberScrollState())) {
+            Text(
+                when {
+                    searching -> "Searching…"
+                    results == null -> if (recent.isEmpty()) "Search for songs to add" else "Played lately"
+                    list.isEmpty() -> "Nothing found"
+                    else -> "Songs"
+                },
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            )
+            searchError?.let { message ->
+                Text(message, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(10.dp))
+                androidx.compose.material3.TextButton(onClick = { attempt++ }) { Text("Retry search") }
+            }
+            list.forEach { song ->
+                AddRow(song, song.videoId in inList) {
+                    LibraryStore.addToPlaylist(playlistId, song)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
+internal fun AddRow(song: Song, added: Boolean, onAdd: () -> Unit) {
+    val pop by animateFloatAsState(if (added) 1f else 0f, tween(260), label = "added")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(enabled = !added) {  onAdd() }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Artwork(song.thumbnailUrl.artworkAt(ROW_ART_PX), Modifier.size(48.dp), RoundedCornerShape(10.dp))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(song.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (added) "Added" else song.artist,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        Box(
+            Modifier
+                .size(36.dp)
+                .graphicsLayer { val s = 1f + 0.18f * kotlin.math.sin(Math.PI.toFloat() * pop); scaleX = s; scaleY = s }
+                .clip(CircleShape)
+                .background(if (added) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest),
+            contentAlignment = Alignment.Center,
+        ) {
+            AnimatedContent(added, transitionSpec = { (fadeIn(tween(180)) + scaleIn(tween(220), 0.6f)) togetherWith fadeOut(tween(120)) }, label = "addIcon") { a ->
+                Icon(
+                    if (a) Icons.Rounded.Check else Icons.Rounded.Add,
+                    if (a) "Added" else "Add to playlist",
+                    tint = if (a) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+    }
+}
+
+/** A round button the height of the others in the row. */
+@Composable
+private fun RoundToolButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Box(
+        Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .clickable {  onClick() },
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, label, Modifier.size(20.dp)) }
+}
+
+/** Saves the album or playlist to the library, or takes it out; a little pop when it goes in. */
+@Composable
+private fun ListHeart(saved: Boolean, onClick: () -> Unit) {
+    val pop = remember { androidx.compose.animation.core.Animatable(1f) }
+    var bursts by remember { mutableStateOf(0) }
+    LaunchedEffect(bursts) {
+        if (bursts == 0) return@LaunchedEffect
+        pop.snapTo(0.7f)
+        pop.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.4f, stiffness = 500f))
+    }
+    Box(
+        Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .clickable {
+                if (!saved) bursts++
+                onClick()
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            if (saved) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+            if (saved) "Remove from library" else "Save to library",
+            Modifier.size(22.dp).graphicsLayer { scaleX = pop.value; scaleY = pop.value },
+            tint = if (saved) androidx.compose.ui.graphics.Color(0xFFFF4D6D) else MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+/** The row under a list's Play and Shuffle: download it all, and for the app's own playlists, add songs. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+public fun ListTools(
+    songs: List<Song>,
+    onAddSongs: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    /** Whether the list's heart is on; null shows no heart (the app's own playlists). */
+    saved: Boolean? = null,
+    onSave: () -> Unit = {},
+    onShare: (() -> Unit)? = null,
+    /** For a playlist on the account's YouTube Music: who can see it, and changing that. */
+    privacy: com.grayguava.legato.base.model.PlaylistPrivacy? = null,
+    onPrivacy: (() -> Unit)? = null,
+) {
+    androidx.compose.foundation.layout.FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (saved != null) ListHeart(saved, onSave)
+        if (onPrivacy != null) com.grayguava.legato.ui.components.PrivacyButton(privacy, onPrivacy)
+        if (onAddSongs != null) AddSongsButton(onAddSongs)
+        if (onShare != null) RoundToolButton(Icons.Rounded.Share, "Share", onShare)
+    }
+}

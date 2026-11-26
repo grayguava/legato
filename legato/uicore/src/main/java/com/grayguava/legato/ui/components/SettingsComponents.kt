@@ -1,0 +1,219 @@
+package com.grayguava.legato.ui.components
+
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import com.grayguava.legato.ui.icons.SfIcons
+
+/** Small gray uppercase label above a group. */
+@Composable
+public fun GroupLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text.uppercase(),
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.padding(start = 28.dp, end = 28.dp, top = 28.dp, bottom = 10.dp),
+    )
+}
+
+/** A rounded card holding rows, with hairline dividers between them. */
+@Composable
+public fun GroupCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    // The card itself is the page colour, so it disappears into the page and
+    // the rows and their dividers stand on it alone.
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(7.dp))
+            .background(MaterialTheme.colorScheme.background),
+        content = content,
+    )
+}
+
+@Composable
+public fun RowDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 69.dp),
+        thickness = 0.75.dp,
+        color = MaterialTheme.colorScheme.outlineVariant,
+    )
+}
+
+/**
+ * One setting: optional icon, title, summary, and whatever sits on the
+ * right (a switch, a value and chevron, nothing).
+ */
+@Composable
+public fun SettingRow(
+    title: String,
+    modifier: Modifier = Modifier,
+    summary: String? = null,
+    icon: ImageVector? = null,
+    enabled: Boolean = true,
+    onClick: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+    below: (@Composable ColumnScope.() -> Unit)? = null,
+    /** Shown where the icon would be; an avatar, say. Takes the icon's place when set. */
+    leading: (@Composable () -> Unit)? = null,
+    /** Still being worked on: marked with a small "Beta" tag after the title. */
+    beta: Boolean = false,
+    /** Overrides the title's colour; a destructive row paints it red. */
+    titleColor: Color? = null,
+) {
+    val alpha = if (enabled) 1f else 0.45f
+    Column(
+        modifier
+            .fillMaxWidth()
+            .then(if (onClick != null && enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (leading != null) {
+                leading()
+                Box(Modifier.width(26.dp))
+            } else if (icon != null) {
+                Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha), modifier = Modifier.size(23.dp))
+                Box(Modifier.width(26.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Normal, color = titleColor ?: MaterialTheme.colorScheme.onSurface.copy(alpha = alpha), modifier = Modifier.weight(1f, fill = false))
+                    if (beta) BetaTag(Modifier.padding(start = 8.dp))
+                }
+                if (!summary.isNullOrBlank()) {
+                    Text(
+                        summary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+            if (trailing != null) {
+                Box(Modifier.padding(start = 12.dp)) { trailing() }
+            }
+        }
+        if (below != null) {
+            Column(Modifier.padding(start = if (icon != null || leading != null) 52.dp else 0.dp, top = 12.dp), content = below)
+        }
+    }
+}
+
+@Composable
+public fun ToggleRow(
+    title: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+    summary: String? = null,
+    icon: ImageVector? = null,
+    enabled: Boolean = true,
+    beta: Boolean = false,
+) {
+    SettingRow(title, summary = summary, icon = icon, enabled = enabled, beta = beta, onClick = { onChange(!checked) }, trailing = {
+        AppSwitch(checked, onChange, enabled)
+    })
+}
+
+@Composable
+public fun NavRow(title: String, onClick: () -> Unit, summary: String? = null, icon: ImageVector? = null, value: String? = null, leading: (@Composable () -> Unit)? = null, titleColor: Color? = null) {
+    SettingRow(title, summary = summary, icon = icon, onClick = onClick, leading = leading, titleColor = titleColor, trailing = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (value != null) {
+                Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    })
+}
+
+/** The small "Beta" tag on a setting that still has rough edges. */
+@Composable
+public fun BetaTag(modifier: Modifier = Modifier) {
+    Text(
+        "Beta",
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.tertiary,
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.16f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 6.dp, vertical = 1.dp),
+    )
+}
+
+/** The app's switch: iOS geometry, Liquid Glass when that's on, a flat knob otherwise. */
+@Composable
+public fun AppSwitch(checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) {
+    LiquidSwitch(checked, onChange, enabled)
+}
+
+/** A segmented choice drawn as a sliding light pill on a dark track. */
+@Composable
+public fun <T> PillSegmented(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
+    val c = MaterialTheme.colorScheme
+    BoxWithConstraints(
+        modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(c.surfaceContainerHighest.copy(alpha = 0.7f))
+            .padding(5.dp),
+    ) {
+        val index = options.indexOf(selected).coerceAtLeast(0)
+        val segment = maxWidth / options.size
+        val x by animateDpAsState(segment * index, spring(dampingRatio = 0.8f, stiffness = 500f), label = "pill")
+        Box(
+            Modifier
+                .offset { IntOffset(x.roundToPx(), 0) }
+                .width(segment)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(12.dp))
+                .background(c.onSurface),
+        )
+        Row(Modifier.fillMaxWidth().fillMaxHeight(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            options.forEachIndexed { i, option ->
+                val color by animateColorAsState(if (i == index) c.background else c.onSurfaceVariant, label = "pillText")
+                Box(
+                    Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(12.dp)).clickable { onSelect(option) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(label(option), color = color, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center, maxLines = 1)
+                }
+            }
+        }
+    }
+}

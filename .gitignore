@@ -1,0 +1,39 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+keystore.properties
+*.apk
+*.jks
+*.keystore
+# Every module builds into its own directory.
+/app/build
+
+# Finished apks, kept at the front door
+/bin/
+/legato/*/build
+.kotlin/
+
+# Machine-local helper scripts
+.localscripts/
+
+# The plan for the work, kept on this machine
+PLAN.md
+sourcegato.md
+
+# Python wheels (desktop test deps belong in a venv, not the repo).
+*.whl
+
+# Design-check hook cache
+.impeccable/
+# Local checklists / notes, machine-local only
+checklist.md
+
+# Local agent policy for this machine, not project source
+AGENTS.md

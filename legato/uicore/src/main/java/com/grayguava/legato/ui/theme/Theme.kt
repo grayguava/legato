@@ -1,0 +1,221 @@
+package com.grayguava.legato.ui.theme
+
+import android.os.Build
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.grayguava.legato.settings.SEED_COLOR
+import com.materialkolor.PaletteStyle
+import com.materialkolor.rememberDynamicColorScheme
+
+/**
+ * The app theme. The scheme comes from, in order: the playing track's artwork
+ * (when that option is on and a color has been read from it), Material You
+ * wallpaper colors (Android 12+), or the chosen accent. Color changes animate,
+ * so a new track's colors ease in rather than snap.
+ */
+/** The colour read from the playing song's cover, or null with nothing playing; set whatever the theme follows. */
+public val LocalArtworkSeed: ProvidableCompositionLocal<Color?> = compositionLocalOf<Color?> { null }
+
+/**
+ * The playing song's own accent pair (primary, tertiary) from a scheme seeded
+ * by its cover, for small touches that follow the music even when the app's
+ * theme doesn't; the theme's own when nothing is playing. Eases between songs.
+ */
+@Composable
+public fun songAccents(): Pair<Color, Color> {
+    val seed = LocalArtworkSeed.current
+    val theme = MaterialTheme.colorScheme
+    if (seed == null) return theme.primary to theme.tertiary
+    val scheme = rememberDynamicColorScheme(
+        seedColor = seed,
+        isDark = theme.background.red + theme.background.green + theme.background.blue < 1.5f,
+        isAmoled = false,
+        style = PaletteStyle.Vibrant,
+    )
+    val primary by animateColorAsState(scheme.primary, tween(600), label = "songPrimary")
+    val tertiary by animateColorAsState(scheme.tertiary, tween(600), label = "songTertiary")
+    return primary to tertiary
+}
+
+@Composable
+public fun LegatoTheme(
+    artworkSeed: Color? = null,
+    content: @Composable () -> Unit,
+) {
+    // The app's own colours are monochrome, on true black; the playing cover
+    // keeps its own, where the player and the artwork pages use it.
+    val generated = rememberDynamicColorScheme(
+        seedColor = Color(SEED_COLOR),
+        isDark = true,
+        isAmoled = true,
+        style = PaletteStyle.Monochrome,
+    )
+    val scheme = generated.toPureBlack()
+
+    MaterialTheme(
+        colorScheme = scheme.animated(),
+        typography = AppTypography,
+        shapes = AppShapes,
+    ) {
+        CompositionLocalProvider(
+            LocalArtworkSeed provides artworkSeed,
+            com.grayguava.legato.ui.components.LocalFocusRingColor provides MaterialTheme.colorScheme.primary,
+        ) {
+            content()
+        }
+    }
+}
+
+/**
+ * A dark scheme seeded from artwork, for the full player: it always reads as
+ * a dark, immersive surface whatever the app theme is.
+ */
+@Composable
+public fun PlayerTheme(seed: Color?, neutral: Boolean = false, active: Boolean = true, content: @Composable () -> Unit) {
+    val scheme = rememberDynamicColorScheme(
+        seedColor = seed ?: Color(SEED_COLOR),
+        isDark = true,
+        isAmoled = true,
+        style = PaletteStyle.Vibrant,
+    )
+    // Keep artwork-derived background tones even when the layout uses white controls.
+    val playerScheme = if (neutral) scheme.copy(
+        primary = Color.White, onPrimary = Color.Black, secondary = Color.White, tertiary = Color.White,
+        background = Color(0xFF202023), surface = Color(0xFF202023), onSurface = Color.White,
+        onBackground = Color.White, onSurfaceVariant = Color(0xFFCACACE),
+        surfaceContainer = Color(0xFF2B2B2E), surfaceContainerHigh = Color(0xFF36363A),
+    ) else scheme
+    MaterialTheme(
+        colorScheme = if (!active) MaterialTheme.colorScheme else playerScheme.animated(),
+        typography = AppTypography,
+        shapes = AppShapes,
+    ) {
+        content()
+    }
+}
+
+/**
+ * Black backgrounds with neutral gray cards, so color comes only from the
+ * accent and the artwork, never from tinted surfaces.
+ */
+private fun ColorScheme.toPureBlack(): ColorScheme = copy(
+    background = Color.Black,
+    surface = Color.Black,
+    surfaceVariant = Color(0xFF242426),
+    surfaceContainerLowest = Color.Black,
+    surfaceContainerLow = Color(0xFF0E0E0F),
+    surfaceContainer = Color(0xFF1B1B1D),
+    surfaceContainerHigh = Color(0xFF232325),
+    surfaceContainerHighest = Color(0xFF2D2D30),
+    onSurface = Color(0xFFF2F2F3),
+    onBackground = Color(0xFFF2F2F3),
+    onSurfaceVariant = Color(0xFF9A9AA0),
+    outline = Color(0xFF4A4A4F),
+    outlineVariant = Color(0xFF2E2E32),
+    // iOS's red, so a destructive row and its button read the way they do on an iPhone.
+    error = Color(0xFFFF453A),
+    onError = Color.White,
+)
+
+/** The scheme with every colour easing to its new value, so a change of seed fades rather than snaps. */
+@Composable
+public fun ColorScheme.animated(): ColorScheme {
+    val spec = tween<Color>(durationMillis = 600)
+    @Composable
+    fun Color.a() = animateColorAsState(this, spec, label = "scheme").value
+    return copy(
+        primary = primary.a(),
+        onPrimary = onPrimary.a(),
+        primaryContainer = primaryContainer.a(),
+        onPrimaryContainer = onPrimaryContainer.a(),
+        secondary = secondary.a(),
+        onSecondary = onSecondary.a(),
+        secondaryContainer = secondaryContainer.a(),
+        onSecondaryContainer = onSecondaryContainer.a(),
+        tertiary = tertiary.a(),
+        tertiaryContainer = tertiaryContainer.a(),
+        onTertiaryContainer = onTertiaryContainer.a(),
+        background = background.a(),
+        onBackground = onBackground.a(),
+        surface = surface.a(),
+        onSurface = onSurface.a(),
+        surfaceVariant = surfaceVariant.a(),
+        onSurfaceVariant = onSurfaceVariant.a(),
+        surfaceContainerLowest = surfaceContainerLowest.a(),
+        surfaceContainerLow = surfaceContainerLow.a(),
+        surfaceContainer = surfaceContainer.a(),
+        surfaceContainerHigh = surfaceContainerHigh.a(),
+        surfaceContainerHighest = surfaceContainerHighest.a(),
+        outline = outline.a(),
+        outlineVariant = outlineVariant.a(),
+    )
+}
+
+private val baseType = Typography()
+
+private fun TextStyle.scaled(weight: FontWeight? = null, spacing: Float? = null, family: FontFamily? = null) =
+    copy(fontFamily = family ?: fontFamily, fontWeight = weight ?: fontWeight, letterSpacing = spacing?.sp ?: letterSpacing)
+
+/*
+ * The styles as SF Pro would set them: the display, headline and title styles
+ * in the Display cut, everything smaller in the plain cut. The letter
+ * spacing of the small styles is SF Pro Text's — Apple sets text under
+ * 20 pt looser than its display faces, so the small styles open up — while
+ * the large styles keep the tighter spacing SF Pro Display is drawn with.
+ */
+public val AppTypography: Typography = Typography(
+    displayLarge = baseType.displayLarge.scaled(FontWeight.Bold, -1.2f, InterDisplay),
+    displayMedium = baseType.displayMedium.scaled(FontWeight.Bold, -1f, InterDisplay),
+    displaySmall = baseType.displaySmall.scaled(FontWeight.Bold, -0.6f, InterDisplay),
+    headlineLarge = baseType.headlineLarge.scaled(FontWeight.Bold, -0.4f, InterDisplay),
+    headlineMedium = baseType.headlineMedium.scaled(FontWeight.SemiBold, -0.3f, InterDisplay),
+    headlineSmall = baseType.headlineSmall.scaled(FontWeight.SemiBold, -0.2f, InterDisplay),
+    titleLarge = baseType.titleLarge.scaled(FontWeight.SemiBold, -0.1f, InterDisplay),
+    titleMedium = baseType.titleMedium.scaled(FontWeight.Medium, 0.1f, InterText),
+    titleSmall = baseType.titleSmall.scaled(FontWeight.Medium, 0.2f, InterText),
+    bodyLarge = baseType.bodyLarge.scaled(spacing = 0.1f, family = InterText),
+    bodyMedium = baseType.bodyMedium.scaled(spacing = 0.2f, family = InterText),
+    bodySmall = baseType.bodySmall.scaled(spacing = 0.3f, family = InterText),
+    labelLarge = baseType.labelLarge.scaled(FontWeight.Medium, 0.2f, InterText),
+    labelMedium = baseType.labelMedium.scaled(FontWeight.Medium, 0.3f, InterText),
+    labelSmall = baseType.labelSmall.scaled(FontWeight.Medium, 0.4f, InterText),
+)
+
+/** Large, heavy lyric lines, read at a glance from arm's length. */
+public val LyricsTextStyle: TextStyle = TextStyle(
+    fontFamily = InterDisplay,
+    fontSize = 34.sp,
+    lineHeight = 41.sp,
+    fontWeight = FontWeight.ExtraBold,
+    letterSpacing = (-0.6).sp,
+)
+
+public val AppShapes: Shapes = Shapes(
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(7.dp),
+    medium = RoundedCornerShape(11.2.dp),
+    large = RoundedCornerShape(16.8.dp),
+    extraLarge = RoundedCornerShape(32.dp),
+)
+
+@Composable
+public fun rememberSeedSwatches(colors: List<Int>): List<Color> = remember(colors) { colors.map { Color(it) } }
