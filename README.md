@@ -19,11 +19,6 @@
 Free music player for the YouTube Music catalogue, sign in only if you want
 your likes and playlists. Android first, desktop and TV later.
 
-Legato puts the YouTube Music catalogue in a shell of its own: frosted glass
-panels, springy enter motion, bottom docks, and one song menu for every screen:
-a long press and the "⋮" button open the same panel, with the song it acts on
-staying lit.
-
 ## Features
 
 - Playback: search, browse and play anything on the catalogue; likes, playlists,
