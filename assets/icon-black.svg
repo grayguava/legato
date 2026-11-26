@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- The Legato mark: two slashes, 65 degrees, round ends, black strokes
+       on no background. Five percent shorter, for the launcher's safe zone. -->
+  <path d="M164.07,347.2L249.13,164.8M262.67,347.2L346.93,164.8" fill="none" stroke="#000000" stroke-width="64.6" stroke-linecap="round"/>
+</svg>
