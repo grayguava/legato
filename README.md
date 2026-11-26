@@ -2,7 +2,7 @@
 
 # Legato
 
-### An iOS-style music player for the YouTube Music catalogue
+### A music player for the YouTube Music catalogue
 
 [Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white) ·
 [Kotlin and Jetpack Compose](https://img.shields.io/badge/Kotlin_7F52FF) ·
@@ -19,7 +19,7 @@
 Free music player for the YouTube Music catalogue, sign in only if you want
 your likes and playlists. Android first, desktop and TV later.
 
-Legato puts the YouTube Music catalogue in an iOS-style shell: frosted glass
+Legato puts the YouTube Music catalogue in a shell of its own: frosted glass
 panels, springy enter motion, bottom docks, and one song menu for every screen —
 a long press and the "⋮" button open the same panel, with the song it acts on
 staying lit.
