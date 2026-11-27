@@ -37,6 +37,3 @@ checklist.md
 
 # Local agent policy for this machine, not project source
 AGENTS.md
-
-# Local version, kept out of git so a build cannot trigger a release
-/version

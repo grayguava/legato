@@ -11,11 +11,11 @@ plugins {
 // of the machine-local build state so the root of the repository stays readable.
 layout.buildDirectory.set(layout.projectDirectory.dir(".gradle/build"))
 
-// The version comes from the `version` file at the root of the repository when
-// there is one, and from LEGATO_VERSION or -PlegatoVersion when a build needs its
-// own. The file is not tracked: a release passes the version in.
+// The version lives in the `version` file at the root of the repository, which is
+// the one thing a release changes. It is read here and given to every module.
 //
-// LEGATO_VERSION=1.0.5 ./gradlew assembleRelease
+// A local build can take a version of its own, so an update can be tried without
+// touching the tracked file: LEGATO_VERSION=1.0.5 ./gradlew assembleRelease
 val versionFile = rootProject.file("version")
 val localVersion = (project.findProperty("legatoVersion") as String?)?.trim()
     ?: providers.environmentVariable("LEGATO_VERSION").orNull?.trim()
