@@ -1,12 +1,12 @@
 name: Release
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - version
   workflow_dispatch:
-    inputs:
-      version:
-        description: Version to release, for example 0.1.0
-        required: true
-        type: string
 
 permissions:
   contents: write
@@ -27,11 +27,13 @@ jobs:
 
       - name: Read version
         id: version
-        env:
-          INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          version="$(printf '%s' "$INPUT_VERSION" | tr -d ' \t\r\n')"
+          if [ ! -f version ]; then
+            echo "version file not found"
+            exit 1
+          fi
+          version="$(tr -d ' \t\r\n' < version)"
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "version must contain three numeric parts, for example 0.1.0."
             exit 1
@@ -144,7 +146,6 @@ jobs:
 
       - name: Build the signed release
         env:
-          LEGATO_VERSION: ${{ needs.preflight.outputs.version }}
           LEGATO_KEYSTORE_PASSWORD: ${{ secrets.LEGATO_KEYSTORE_PASSWORD }}
           LEGATO_KEY_ALIAS: ${{ secrets.LEGATO_KEY_ALIAS }}
           LEGATO_KEY_PASSWORD: ${{ secrets.LEGATO_KEY_PASSWORD }}
