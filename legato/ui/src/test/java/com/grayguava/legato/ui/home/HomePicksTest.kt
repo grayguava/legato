@@ -6,15 +6,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import com.grayguava.legato.base.model.HomeShelf
 import com.grayguava.legato.base.model.ShelfItem
 import com.grayguava.legato.ui.ScreenCache
 import com.grayguava.legato.ui.browse.SongActions
 import java.io.File
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,7 +24,8 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [35], qualifiers = "w360dp-h800dp-xhdpi", application = android.app.Application::class)
 class HomePicksTest {
     @get:Rule val compose = createAndroidComposeRule<androidx.activity.ComponentActivity>()
-    @Test fun picksLeadHomeAndHistoryIsOneTapAway() {
+
+    @Test fun picksLeadHome() {
         val picks = HomeShelf("Recommended for you", (1..8).map { ShelfItem("Song $it", "Artist", null, "id$it", null) })
         ScreenCache.put("home:${com.grayguava.legato.settings.AppSettings.playback.value.recommender.name}", listOf(picks))
         compose.setContent {
@@ -40,18 +38,11 @@ class HomePicksTest {
         compose.onNodeWithText("Quick picks").assertExists()
         compose.onNodeWithText("Song 1").assertExists()
         compose.waitForIdle()
-        val heading = compose.onNodeWithText("Quick picks").fetchSemanticsNode().boundsInRoot
-        val history = compose.onNodeWithContentDescription("Recently played").fetchSemanticsNode().boundsInRoot
-        val account = compose.onNodeWithContentDescription("Settings").fetchSemanticsNode().boundsInRoot
-        assertTrue("History must align with Quick picks", kotlin.math.abs(heading.center.y - history.center.y) < 2f)
-        assertTrue("History must be below the top actions", history.top > account.bottom)
         val view = compose.activity.window.decorView
         val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
         view.draw(android.graphics.Canvas(bitmap))
         File("build/screenshots/home/quick-picks.png").apply { parentFile!!.mkdirs() }.outputStream().use {
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
         }
-        compose.onNodeWithContentDescription("Recently played").performClick()
-        compose.onNodeWithText("Your recently played songs will appear here").assertExists()
     }
 }

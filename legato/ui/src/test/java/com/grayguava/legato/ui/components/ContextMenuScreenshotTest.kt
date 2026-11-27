@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
@@ -29,7 +30,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import org.robolectric.shadows.ShadowDialog
 
 /** A long press lifts the item out with its menu beside it: the song's rows, or the album's. */
 @RunWith(RobolectricTestRunner::class)
@@ -43,7 +43,8 @@ class ContextMenuScreenshotTest {
         val bitmap = Bitmap.createBitmap(back.width, back.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         back.draw(canvas)
-        ShadowDialog.getLatestDialog().window!!.decorView.draw(canvas)
+        // The menu is a Popup in its own window, so it is not part of this decor
+        // view; the assertions above are what check it.
         File("build/screenshots/$name.png").apply { parentFile!!.mkdirs() }.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
@@ -61,7 +62,7 @@ class ContextMenuScreenshotTest {
         compose.mainClock.advanceTimeBy(800)
         compose.waitForIdle()
         compose.onNodeWithText("Add to playlist").assertIsDisplayed()
-        compose.onNodeWithText("More options").assertIsDisplayed()
+        compose.onNodeWithContentDescription("More options").assertIsDisplayed()
         shot("context-song")
     }
 
@@ -83,7 +84,7 @@ class ContextMenuScreenshotTest {
         compose.onNodeWithText("Wake Up").performTouchInput { longClick() }
         compose.mainClock.advanceTimeBy(800)
         compose.waitForIdle()
-        compose.onNodeWithText("Pin").assertIsDisplayed()
+        compose.onNodeWithText("Share").assertIsDisplayed()
         shot("context-album")
     }
 }
