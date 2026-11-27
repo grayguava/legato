@@ -49,8 +49,9 @@ Android phone or tablet: download the APK from the
 ./gradlew testDebugUnitTest
 ```
 
-You need a JDK and an Android SDK to build. Release signing and the project
-layout are documented in the repo.
+You need a JDK and an Android SDK to build. A push that changes the `version`
+file runs `.github/workflows/release.yml`, which tests the tree, signs with the
+`LEGATO_KEYSTORE` secrets and leaves a draft release with the APKs.
 
 ## Privacy
 

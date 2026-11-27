@@ -26,7 +26,7 @@ android {
 
     // A release key from the environment when there is one; otherwise release
     // builds are signed with the debug key so they still install. The key
-    // itself lives outside the repository; see docs/releasing.md.
+    // itself lives outside the repository; see .github/workflows/release.yml.
     val releaseKeystore = System.getenv("LEGATO_KEYSTORE")?.let(::file)?.takeIf { it.exists() }
     signingConfigs {
         if (releaseKeystore != null) {
