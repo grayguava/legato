@@ -22,9 +22,10 @@ where a section says so.
 
 - Source: [kushagrasinghx/BitChord](https://github.com/kushagrasinghx/BitChord), GPL-3.0
 - The Innertube client, its response parser and the YouTube stream resolver
-  under `data/innertube/` are adapted from it, as are the InnerTubeX glue and
-  the PoToken WebView (`data/innertube/InnerTubeXResolver.kt`,
-  `data/innertube/potoken/`, `assets/po_token.html`).
+  under `legato/source/src/main/java/com/grayguava/legato/source/innertube/`
+  are adapted from it, as are the InnerTubeX glue and the PoToken WebView
+  (`innertube/InnerTubeXResolver.kt`, `innertube/potoken/`,
+  `legato/app/src/main/assets/po_token.html`).
 - `FlacInfo` adapts its Samsung FLAC decoder exclusion and its STREAMINFO
   measurement approach, from `AudioOutputPolicy.kt` and `PlaybackService.kt`
   at commit `edc1e6f36febf71a118e649411d2fc21b70ead45`. The affected
@@ -59,7 +60,9 @@ where a section says so.
 
 - Source: [TeamNewPipe/NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor)
   and [TeamNewPipe/nanojson](https://github.com/TeamNewPipe/nanojson), GPL-3.0
-- The stream extractor library, and the JSON parser it uses.
+- The stream extractor library, and the JSON parser it uses. The build
+  repackages the extractor with its utility classes removed and pins it to
+  v0.26.3, whose player-JS parser still reads the current player build.
 
 ### Mozilla Rhino
 
@@ -67,21 +70,24 @@ where a section says so.
 - The JavaScript engine that runs YouTube's own player code to work out how
   to stream a song.
 
-### Ktor and OkHttp
+### Ktor, OkHttp and Okio
 
-- Source: [ktorio/ktor](https://github.com/ktorio/ktor) and
-  [square/okhttp](https://github.com/square/okhttp), Apache-2.0
-- The HTTP client the app talks to services with, and the one it runs on.
+- Source: [ktorio/ktor](https://github.com/ktorio/ktor),
+  [square/okhttp](https://github.com/square/okhttp) and
+  [square/okio](https://github.com/square/okio), Apache-2.0
+- The HTTP client the app talks to services with, the one it runs on, and the
+  byte buffers under both.
+
+### Guava
+
+- Source: [google/guava](https://github.com/google/guava), Apache-2.0
+- The futures and immutable collections that Media3 and the coroutine bridge
+  hand back.
 
 ### Coil
 
 - Source: [coil-kt/coil](https://github.com/coil-kt/coil), Apache-2.0
 - Loading and caching the artwork.
-
-### Jsoup
-
-- Source: [jsoup/jsoup](https://github.com/jsoup/jsoup), MIT
-- Parsing the pages the lyrics and the metadata come from.
 
 ### Protocol Buffers
 
@@ -99,10 +105,10 @@ where a section says so.
 ### AndroidX
 
 - Source: [androidx/androidx](https://github.com/androidx/androidx), Apache-2.0
-- Jetpack Compose for the interface, Media3 for playback, WorkManager for
-  the background jobs, and Lifecycle and Navigation for the app's own state.
+- Jetpack Compose for the interface, Media3 for playback, and Lifecycle and
+  Navigation for the app's own state.
 
-### Material Kolar
+### Material Kolor
 
 - Source: [material-kolor/material-kolor](https://github.com/material-kolor/material-kolor),
   Apache-2.0
@@ -124,9 +130,9 @@ where a section says so.
 - Source: [rsms/inter](https://github.com/rsms/inter), by Rasmus Andersson
   and the Inter Project Authors, under the SIL Open Font License 1.1
 - The typeface the whole interface is set in, the plain cut for body text
-  and the Display cut for the large styles. Bundled in `legato/ui`'s
-  resources; its licence file sits beside the other cuts in the upstream
-  release, and its text is at the end of this file.
+  and the Display cut for the large styles. Bundled as `.otf` files in
+  `legato/uicore`'s resources; its licence file sits beside the other cuts in
+  the upstream release, and its text is at the end of this file.
 
 ### SF Symbols
 
@@ -146,24 +152,49 @@ where a section says so.
 
 ## Data and services
 
+### YouTube and YouTube Music
+
+- Source: [youtube.com](https://www.youtube.com) and
+  [music.youtube.com](https://music.youtube.com)
+- The catalogue itself: streams, artwork and metadata, plus your own likes and
+  playlists when you sign in. Nothing is hosted or uploaded by Legato.
+
 ### MusicBrainz and the Cover Art Archive
 
 - Source: [metabrainz/musicbrainz-server](https://github.com/metabrainz/musicbrainz-server)
   and [coverartarchive.org](https://coverartarchive.org), run by the MetaBrainz
   Foundation
-- Album covers and artist photographs.
+- Album covers and recording metadata, matched under MusicBrainz's own rules.
 
 ### Apple Music and iTunes
 
 - Source: [music.apple.com](https://music.apple.com) and the
   [iTunes Search API](https://performance-partners.apple.com/search-api)
-- Animated cover art, artist photographs, track metadata, and word-by-word
-  lyrics through Paxsenix.
+- Animated cover art, artist photographs and track metadata.
+
+### Deezer
+
+- Source: [deezer.com](https://www.deezer.com) and its public API
+- Cover art, track metadata, and the lookup that reads a song link from
+  another service.
+
+### UniTune
+
+- Source: [api.unitune.art](https://api.unitune.art)
+- The lookup for song links from services Deezer's search does not cover.
+
+### JioSaavn
+
+- Source: [jiosaavn.com](https://www.jiosaavn.com)
+- The optional recommendation source in settings: its public search and the
+  same pick endpoint its own app uses. Only names are read; nothing is streamed
+  from it.
 
 ### AutoEq
 
 - Source: [jaakkopasanen/AutoEq](https://github.com/jaakkopasanen/AutoEq), MIT
-- The headphone correction data behind the equalizer presets.
+- The headphone correction data behind the equalizer presets, fetched from the
+  repository's published results.
 
 ### SponsorBlock
 
@@ -173,15 +204,29 @@ where a section says so.
 
 ### Lyrics services
 
-- Sources: [lrc.red](https://lrc.red/),
-  [lrclib.net](https://lrclib.net/api),
+- Sources: [lrclib.net](https://lrclib.net/api), [lrc.red](https://lrc.red/),
   [lyricsplus.binimum.org](https://lyricsplus.binimum.org) and its mirrors,
   [lyrics-api.binimum.org](https://lyrics-api.binimum.org/),
   [api-lyrics.simpmusic.org](https://api-lyrics.simpmusic.org/v1/),
-  [music.163.com](https://music.163.com/) for NetEase, and
-  [lyrics-api.boidu.dev](https://lyrics-api.boidu.dev/getLyrics) for KuGou
+  [music.163.com](https://music.163.com/) for NetEase,
+  [lyrics.kugou.com](http://lyrics.kugou.com) for KuGou,
+  [lyrics-api.boidu.dev](https://lyrics-api.boidu.dev/getLyrics) for Better
+  Lyrics, [lyrics.paxsenix.org](https://lyrics.paxsenix.org) for Apple Music,
+  and YouTube's own captions through Better Lyrics' unison endpoint
 - Word-by-word and line-synced lyrics, each read from the service that has
   them.
+
+### Google Translate
+
+- Source: [translate.googleapis.com](https://translate.googleapis.com)
+- The romanised reading shown above Japanese lyrics.
+
+### Zemer cipher
+
+- Source: [ZemerTeam/zemer-cipher](https://github.com/ZemerTeam/zemer-cipher),
+  GPL-3.0
+- The player configuration file the stream resolver downloads to keep up with
+  YouTube's player changes.
 
 ## The Inter licence
 
